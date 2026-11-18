@@ -45,7 +45,8 @@
     store.set(t); return t;
   }
 
-  async function login() {
+  // pick = Kontoauswahl erzwingen (wichtig auf Geräten, wo der Browser schon mit einem anderen Microsoft-Konto angemeldet ist → sonst AADSTS50197)
+  async function login(pick) {
     const verifier = rand(48), st = rand(16);
     const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
     try { sessionStorage.setItem('sh.pkce', JSON.stringify({ verifier, state: st })); } catch {}
@@ -54,7 +55,8 @@
       client_id: CFG.clientId, response_type: 'code', redirect_uri: REDIRECT, scope: SCOPES,
       code_challenge: challenge, code_challenge_method: 'S256', state: st, response_mode: 'query'
     });
-    if (old?.user) p.set('login_hint', old.user);
+    if (old?.user && pick !== true) p.set('login_hint', old.user);
+    else p.set('prompt', 'select_account');
     location.assign(AUTH + '/authorize?' + p);
   }
 
@@ -92,9 +94,11 @@
         <svg class="brand-icon" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M5 19 20 6l15 13"/><path d="M9 16v17h22V16"/><path d="M17 33v-8h6v8"/></svg>
         <h1>Smarthome</h1><p>Für den Zugriff von unterwegs mit dem Microsoft-Konto anmelden.</p>
         <button class="gate-btn" id="gate-login">Mit Microsoft anmelden</button>
+        <button class="gate-link" id="gate-other">Anderes Microsoft-Konto wählen</button>
         <p class="gate-msg" id="gate-msg"></p></div>`;
       document.body.appendChild(g);
-      g.querySelector('#gate-login').onclick = login;
+      g.querySelector('#gate-login').onclick = () => login(false);
+      g.querySelector('#gate-other').onclick = () => login(true);
     }
     g.querySelector('#gate-msg').textContent = msg || '';
     g.hidden = false;

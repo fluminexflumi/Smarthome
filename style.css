@@ -300,3 +300,4 @@ input[type=range] { width: 100%; height: 26px; margin: 0; accent-color: var(--or
 .gate-btn { width: 100%; padding: 14px 18px; border: 0; border-radius: 14px; font: inherit; font-weight: 600; cursor: pointer; background: var(--orange, #f5953a); color: #1b1206; }
 .gate-btn:hover { filter: brightness(1.08); }
 .gate-msg { margin: 14px 0 0 !important; min-height: 1.2em; color: #ff8a80 !important; font-size: .9rem; }
+.gate-link { margin-top: 12px; background: none; border: 0; color: var(--muted, #8a93a3); font: inherit; font-size: .9rem; text-decoration: underline; cursor: pointer; }
