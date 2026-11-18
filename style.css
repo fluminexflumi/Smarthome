@@ -63,6 +63,8 @@ main { grid-area: main; min-width: 0; }
 .top-right { display: flex; align-items: center; gap: 14px; }
 .icon-btn { position: relative; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); display: grid; place-items: center; cursor: pointer; }
 .icon-btn svg { width: 20px; height: 20px; }
+.icon-btn[hidden] { display: none; }
+.install-btn { color: var(--orange, #f5953a); }
 .badge { position: absolute; top: 8px; right: 9px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--orange); color: #1a1208; font-size: 10px; font-weight: 700; display: grid; place-items: center; }
 .user { display: flex; align-items: center; gap: 10px; padding: 5px 16px 5px 5px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
 .avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--orange), #c4602a); display: grid; place-items: center; font-weight: 700; color: #1a1208; }
@@ -326,6 +328,7 @@ input[type=range] { width: 100%; height: 26px; margin: 0; accent-color: var(--or
   .app { gap: 14px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
   .home { grid-template-columns: minmax(0, 1fr); grid-template-areas: "hero" "tiles" "greet" "blinds" "dial" "chart"; gap: 14px; }
   .brand-name { font-size: 19px; } .brand-sub { display: none; } .brand-icon { width: 36px; height: 36px; }
+  .top-right { gap: 8px; } .icon-btn { width: 42px; height: 42px; }
   .hero { min-height: 480px; }
   .vslider { height: 100px; }
   .hub { height: 150px; }
