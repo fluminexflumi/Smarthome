@@ -6,7 +6,8 @@
   "id": "./",
   "start_url": "./",
   "scope": "./",
-  "display": "standalone",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "background_color": "#111317",
   "theme_color": "#14161a",
   "icons": [
