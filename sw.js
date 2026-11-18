@@ -5,8 +5,8 @@
 //  - Netz zuerst: Neue Versionen (GitHub Pages / lokaler Server) sind sofort da.
 //    Der Zwischenspeicher dient nur dazu, dass die App ohne Netz noch startet.
 // Bei Änderungen an der Dateiliste VERSION erhöhen.
-const VERSION = 'sh-v2';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'auth.js', 'pwa.js', 'manifest.webmanifest',
+const VERSION = 'sh-v3';
+const SHELL = ['./', 'index.html', 'style.css', 'layouts.css', 'app.js', 'layouts.js', 'auth.js', 'pwa.js', 'manifest.webmanifest',
   'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

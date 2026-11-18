@@ -108,7 +108,8 @@ function derive() {
   const lowBatt = blinds.filter(b => b.battery != null && b.battery < 20);
   const openBlinds = blinds.filter(b => b.position != null && b.position <= 2);
   const vac = S.vacuum || { configured: false, ok: false, rooms: [] };
-  return { hue, ikea, har, rooms, room, roomLights, allLights, blinds, reachBlinds, actId, actOn, actLabel, onLights, roomPct, lowBatt, openBlinds, vac };
+  const sp = S.spotify || { configured: false, linked: false, ok: false, devices: [] };
+  return { hue, ikea, har, rooms, room, roomLights, allLights, blinds, reachBlinds, actId, actOn, actLabel, onLights, roomPct, lowBatt, openBlinds, vac, sp };
 }
 
 // ---------- Saugroboter ----------
@@ -236,6 +237,12 @@ function renderFrame(d) {
   $('#bell').title = hints.join('\n') || 'Keine Hinweise';
   $('#foot-updated').textContent = 'Stand ' + new Date(S.updated).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  // Glas/Panorama: unscharfes Wohnzimmer als Hintergrund (nur neu zeichnen, wenn sich etwas ändert)
+  const bg = $('#bgscene');
+  if (bg) {
+    const html = layout === 'glas' || layout === 'panorama' ? roomSvg(d) : '';
+    if (bg.dataset.sig !== html) { bg.innerHTML = html; bg.dataset.sig = html; }
+  }
 }
 
 // ---------- Home ----------
@@ -504,7 +511,8 @@ function render() {
   if (!S) return;
   const d = derive();
   renderFrame(d);
-  const v = { home: renderHome, licht: renderLicht, rollos: renderRollos, sauger: renderSauger, szenen: renderSzenen }[view] || renderHome;
+  const home = HOMES[layout] || renderHome; // Startseite je nach gewähltem Layout (layouts.js)
+  const v = { home, licht: renderLicht, rollos: renderRollos, sauger: renderSauger, szenen: renderSzenen, musik: renderMusik, layouts: renderLayouts }[view] || home;
   $('#view').innerHTML = v(d);
   bindVSlider(d);
 }
@@ -547,13 +555,20 @@ document.addEventListener('change', (e) => {
     if (k === 'blinds') blindsAll(on ? 0 : 100);
     if (k === 'tv') toggleTv(d);
     if (k === 'ikealamp') toggleIkeaLamp(d, on);
+    if (k === 'music') api('spotify/cmd/' + (d.sp.playing ? 'pause' : 'play'));
     return;
   }
   if (el.type === 'checkbox') api(a, { on: el.checked });
   if (el.type === 'range') {
     busy = false;
-    api(a, a.startsWith('ikea/blind') ? { position: Number(el.value) } : { bri: Number(el.value) });
+    const n = Number(el.value);
+    api(a, a.startsWith('ikea/blind') ? { position: n } : a === 'spotify/volume' ? { volume: n } : { bri: n });
   }
+});
+// Regler mit Füllfarbe (Layouts): Füllstand beim Ziehen mitführen
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (el.classList?.contains('fill-range')) el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%');
 });
 document.addEventListener('pointerdown', (e) => { if (e.target.type === 'range') busy = true; });
 document.addEventListener('pointerup', () => { if (busy && !$('#vslider')?.matches(':active')) setTimeout(() => { busy = false; render(); }, 500); });
@@ -567,9 +582,18 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('click', (e) => {
   const g = e.target.closest('[data-vacmap]'); if (g) return vacToggleRoom(Number(g.dataset.vacmap));
+  const seek = e.target.closest('[data-spseek]');
+  if (seek && S?.spotify?.duration) {
+    const r = seek.getBoundingClientRect(), f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    return api('spotify/seek', { ms: Math.round(f * S.spotify.duration) });
+  }
   const b = e.target.closest('button'); if (!b || !S) return;
   const d = derive();
-  if (b.dataset.view) { view = b.dataset.view; try { localStorage.setItem('sh.view', view); } catch {} render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  if (b.dataset.layout) { setLayout(b.dataset.layout); render(); }
+  else if (b.dataset.sp) api('spotify/cmd/' + b.dataset.sp);
+  else if (b.dataset.spdev) { api('spotify/device', { id: b.dataset.spdev }); toast('Wechsle das Gerät …'); }
+  else if (b.dataset.lampnav) { lampIdx += Number(b.dataset.lampnav); render(); }
+  else if (b.dataset.view) { view = b.dataset.view; try { localStorage.setItem('sh.view', view); } catch {} render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   else if (b.dataset.goto) { view = b.dataset.goto; try { localStorage.setItem('sh.view', view); } catch {} render(); window.scrollTo({ top: 0 }); }
   else if (b.dataset.room) { roomId = b.dataset.room; render(); }
   else if ('roomToggle' in b.dataset && d.room) api(`hue/room/${d.room.id}`, { on: !d.room.anyOn });
