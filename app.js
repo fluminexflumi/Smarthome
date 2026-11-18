@@ -26,7 +26,11 @@ const I = {
   bolt: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
   battery: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 11v2"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
-  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>'
+  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  robot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M7 6.5h10"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>',
+  dock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M12 11v3m0 0-2-2m2 2 2-2"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>'
 };
 
 // ---------- Server ----------
@@ -103,16 +107,94 @@ function derive() {
   const roomPct = room && room.anyOn ? (dimOn.length ? Math.round(dimOn.reduce((a, l) => a + pct(l.bri), 0) / dimOn.length) : 100) : 0;
   const lowBatt = blinds.filter(b => b.battery != null && b.battery < 20);
   const openBlinds = blinds.filter(b => b.position != null && b.position <= 2);
-  return { hue, ikea, har, rooms, room, roomLights, allLights, blinds, reachBlinds, actId, actOn, actLabel, onLights, roomPct, lowBatt, openBlinds };
+  const vac = S.vacuum || { configured: false, ok: false, rooms: [] };
+  return { hue, ikea, har, rooms, room, roomLights, allLights, blinds, reachBlinds, actId, actOn, actLabel, onLights, roomPct, lowBatt, openBlinds, vac };
+}
+
+// ---------- Saugroboter ----------
+// Status laut MIoT-Spec xiaomi.vacuum.d109gl (siid 2 / piid 2)
+const VAC_STATUS = { 1: 'Bereit', 2: 'Lädt', 3: 'Lädt (Pause)', 4: 'Saugt', 5: 'Pausiert', 6: 'Fährt zur Station', 7: 'Fährt zum Waschen', 8: 'Fernsteuerung', 9: 'Geladen', 10: 'Erstellt Karte', 11: 'Update', 12: 'Station arbeitet', 13: 'Lädt zwischendurch', 14: 'Station arbeitet', 15: 'Fehler', 16: 'Saugt und wischt', 17: 'Wischt', 18: 'Karte pausiert', 19: 'Rückfahrt pausiert', 20: 'Waschen pausiert', 21: 'Erstellt Karte' };
+const VAC_CLEANING = new Set([4, 7, 10, 16, 17, 21]);
+const VAC_PAUSED = new Set([5, 18, 19, 20]);
+const VAC_MODES = [[1, 'Saugen'], [2, 'Wischen'], [3, 'Saugen + Wischen'], [4, 'Erst saugen, dann wischen']];
+const VAC_POWER = [[1, 'Leise'], [2, 'Normal'], [3, 'Stark'], [4, 'Max']];
+const VAC_WATER = [[0, 'Aus'], [1, 'Wenig'], [2, 'Mittel'], [3, 'Viel']];
+const vacSel = new Set(); // ausgewählte Räume (bleibt beim Neuzeichnen erhalten)
+const vacText = (v) => !v.configured ? 'Nicht eingerichtet' : !v.ok ? 'Nicht erreichbar' : v.faults?.length ? 'Störung' : (VAC_STATUS[v.status] || `Status ${v.status}`);
+const vacOn = (v) => v.ok && (VAC_CLEANING.has(v.status) || v.status === 6);
+
+function vacButtons(v, big = false) {
+  const dis = v.ok ? '' : 'disabled';
+  const main = VAC_CLEANING.has(v.status)
+    ? `<button class="round${big ? ' big' : ''}" data-vac="pause" aria-label="Pause" title="Pause" ${dis}>${I.pause}</button>`
+    : VAC_PAUSED.has(v.status)
+      ? `<button class="round${big ? ' big' : ''} accent" data-vac="resume" aria-label="Weiter" title="Weiter" ${dis}>${I.play}</button>`
+      : `<button class="round${big ? ' big' : ''} accent" data-vac="start" aria-label="Reinigung starten" title="Starten" ${dis}>${I.play}</button>`;
+  return `${main}
+    <button class="round${big ? ' big' : ''}" data-vac="dock" aria-label="Zur Station" title="Zur Station" ${dis}>${I.dock}</button>
+    <button class="round${big ? ' big' : ''}" data-vac="locate" aria-label="Roboter finden (Ton)" title="Finden (Ton)" ${dis}>${I.search}</button>`;
+}
+function battRing(p) {
+  const r = 26, c = 2 * Math.PI * r, v = Math.max(0, Math.min(100, p ?? 0));
+  return `<svg class="vac-ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="${r}" stroke="rgba(255,255,255,.12)" stroke-width="6" fill="none"/>
+    <circle cx="32" cy="32" r="${r}" stroke="${v < 20 ? 'var(--red)' : 'var(--teal)'}" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="${(c * v / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 32 32)"/></svg>`;
+}
+function vacCard(d) {
+  const v = d.vac;
+  if (!v.configured) return '';
+  const modeName = VAC_MODES.find(m => m[0] === v.mode)?.[1] || '–';
+  const powerName = VAC_POWER.find(m => m[0] === v.power)?.[1] || '–';
+  return `<section class="card vac-card a-vac ${vacOn(v) ? 'on' : ''}">
+    <div class="vac-left">
+      <div class="vac-batt">${battRing(v.battery)}<div class="vac-batt-val">${v.ok ? (v.battery ?? '–') : '–'}<small>%</small></div></div>
+      <div style="min-width:0">
+        <div class="card-title">${I.robot}<div><h3>Saugroboter</h3><div class="sub">Xiaomi X20 Max</div></div></div>
+        <div class="vac-state">${esc(vacText(v))}${v.ok ? ` <span class="muted">· ${esc(modeName)} · ${esc(powerName)}</span>` : ''}</div>
+      </div>
+    </div>
+    <div class="vac-btns">${vacButtons(v)}<button class="chip-tag outline btn" data-goto="sauger">Räume</button></div>
+  </section>`;
+}
+function renderSauger(d) {
+  const v = d.vac;
+  if (!v.configured) return `<div class="view-head"><h2>Saugroboter</h2></div><p class="muted">Kein Saugroboter eingerichtet (Token fehlt in config.local.json).</p>`;
+  const dis = v.ok ? '' : 'disabled';
+  const chips = (list, cur, key) => list.map(([val, name]) => `<button class="chip ${cur === val ? 'active' : ''}" data-vacset="${key}" data-val="${val}" ${dis}>${esc(name)}</button>`).join('');
+  for (const id of [...vacSel]) if (!v.rooms.some(r => r.id === id)) vacSel.delete(id);
+  return `<div class="view-head"><h2>Saugroboter</h2><span class="muted">${esc(vacText(v))}</span></div>
+  <div class="card vac-hero ${vacOn(v) ? 'on' : ''}" style="margin-bottom:14px">
+    <div class="vac-left">
+      <div class="vac-batt big">${battRing(v.battery)}<div class="vac-batt-val">${v.ok ? (v.battery ?? '–') : '–'}<small>%</small></div></div>
+      <div><div class="sub">Xiaomi X20 Max</div><div class="nm" style="font-size:22px;font-weight:700">${esc(vacText(v))}</div>
+        <div class="muted">${v.ok ? (v.charging === 1 ? 'Lädt' : 'Akku') + ` · Mopp ${v.mop ?? '–'} %` : 'Der Roboter antwortet gerade nicht.'}</div>
+        ${v.faults?.length ? `<div class="chip-tag warn" style="display:inline-block;margin-top:6px">Störung ${esc(v.faults.join(', '))} – siehe Xiaomi Home</div>` : ''}</div>
+    </div>
+    <div class="vac-btns">${vacButtons(v, true)}<button class="round big" data-vac="stop" aria-label="Stopp" title="Stopp" ${dis}>${I.stop}</button></div>
+  </div>
+  <div class="card row-card" style="margin-bottom:14px">
+    <div class="row-top"><div><div class="nm">Räume reinigen</div><div class="sub">Räume antippen, dann starten. Es gelten die Einstellungen unten.</div></div></div>
+    <div class="chips">${v.rooms.map(r => `<button class="chip ${vacSel.has(r.id) ? 'active' : ''}" data-vacroom="${r.id}" ${dis}>${esc(r.name)}</button>`).join('') || '<span class="muted">Noch keine Räume bekannt.</span>'}</div>
+    <div class="chips"><button class="chip accent" data-vacrooms ${vacSel.size && v.ok ? '' : 'disabled'}>${I.play.replace('<svg', '<svg width="14" height="14" style="display:inline;vertical-align:-2px;margin-right:6px"')}${vacSel.size ? `${vacSel.size} ${vacSel.size === 1 ? 'Raum' : 'Räume'} reinigen` : 'Raum wählen'}</button>
+      ${vacSel.size ? '<button class="chip" data-vacclear>Auswahl löschen</button>' : ''}</div>
+  </div>
+  <div class="list-grid">
+    <div class="card row-card"><div class="nm">Reinigungsart</div><div class="chips">${chips(VAC_MODES, v.mode, 'mode')}</div></div>
+    <div class="card row-card"><div class="nm">Saugstärke</div><div class="chips">${chips(VAC_POWER, v.power, 'power')}</div></div>
+    <div class="card row-card"><div class="nm">Wassermenge (Wischen)</div><div class="chips">${chips(VAC_WATER, v.water, 'water')}</div></div>
+    <div class="card row-card"><div class="nm">Station</div><div class="chips">
+      <button class="chip" data-vac="dust" ${dis}>Absaugen</button><button class="chip" data-vac="wash" ${dis}>Mopp waschen</button><button class="chip" data-vac="dry" ${dis}>Mopp trocknen</button></div></div>
+  </div>`;
 }
 
 // ---------- Rahmen ----------
 function renderFrame(d) {
   const pill = (name, ok) => `<span class="pill ${S ? (ok ? '' : 'down') : 'wait'}"><i></i>${name}</span>`;
-  $('#pills').innerHTML = pill('Hue', d.hue.ok) + pill('IKEA', d.ikea.ok) + pill('Harmony', d.har.ok) + pill(live ? 'Live' : 'Getrennt', live);
-  const n = d.lowBatt.length + d.blinds.filter(b => !b.reachable).length;
-  const badge = $('#bell-badge'); badge.hidden = !n; badge.textContent = n;
-  $('#bell').title = [...d.lowBatt.map(b => `${b.name}: Batterie ${b.battery} %`), ...d.blinds.filter(b => !b.reachable).map(b => `${b.name}: nicht erreichbar`)].join('\n') || 'Keine Hinweise';
+  $('#pills').innerHTML = pill('Hue', d.hue.ok) + pill('IKEA', d.ikea.ok) + pill('Harmony', d.har.ok) + (d.vac.configured ? pill('Sauger', d.vac.ok) : '') + pill(live ? 'Live' : 'Getrennt', live);
+  const hints = [...d.lowBatt.map(b => `${b.name}: Batterie ${b.battery} %`), ...d.blinds.filter(b => !b.reachable).map(b => `${b.name}: nicht erreichbar`)];
+  if (d.vac.ok && d.vac.faults?.length) hints.push(`Saugroboter: Störung ${d.vac.faults.join(', ')}`);
+  if (d.vac.ok && d.vac.mop != null && d.vac.mop < 10) hints.push(`Saugroboter: Mopp ersetzen (${d.vac.mop} %)`);
+  const badge = $('#bell-badge'); badge.hidden = !hints.length; badge.textContent = hints.length;
+  $('#bell').title = hints.join('\n') || 'Keine Hinweise';
   $('#foot-updated').textContent = 'Stand ' + new Date(S.updated).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
 }
@@ -327,7 +409,7 @@ function chartCard(d) {
 }
 
 function renderHome(d) {
-  return `<div class="home">${greetCard(d)}${heroCard(d)}${blindsCard(d)}${dialCard(d)}${tilesCard(d)}${chartCard(d)}</div>`;
+  return `<div class="home">${greetCard(d)}${heroCard(d)}${blindsCard(d)}${dialCard(d)}${tilesCard(d)}${chartCard(d)}${vacCard(d)}</div>`;
 }
 
 // ---------- Detailansichten ----------
@@ -383,7 +465,7 @@ function render() {
   if (!S) return;
   const d = derive();
   renderFrame(d);
-  const v = { home: renderHome, licht: renderLicht, rollos: renderRollos, szenen: renderSzenen }[view] || renderHome;
+  const v = { home: renderHome, licht: renderLicht, rollos: renderRollos, sauger: renderSauger, szenen: renderSzenen }[view] || renderHome;
   $('#view').innerHTML = v(d);
   bindVSlider(d);
 }
@@ -462,6 +544,17 @@ document.addEventListener('click', (e) => {
   else if (b.dataset.allblinds) blindsAll(Number(b.dataset.allblinds));
   else if (b.dataset.activity) { api('harmony/activity/' + b.dataset.activity); toast('Starte „' + b.textContent.trim() + '“ …'); }
   else if ('harmonyOff' in b.dataset) { api('harmony/off'); toast('Schalte alles aus …'); }
+  else if (b.dataset.vac) {
+    const names = { start: 'Reinigung startet …', pause: 'Pause', resume: 'Reinigung geht weiter …', stop: 'Gestoppt', dock: 'Fährt zur Station …', locate: 'Roboter meldet sich …', dust: 'Absaugen …', wash: 'Mopp waschen …', dry: 'Mopp trocknen …' };
+    api('vacuum/cmd/' + b.dataset.vac); toast(names[b.dataset.vac] || 'Gesendet');
+  }
+  else if (b.dataset.vacset) api('vacuum/set', { [b.dataset.vacset]: Number(b.dataset.val) });
+  else if (b.dataset.vacroom) { const id = Number(b.dataset.vacroom); vacSel.has(id) ? vacSel.delete(id) : vacSel.add(id); render(); }
+  else if ('vacclear' in b.dataset) { vacSel.clear(); render(); }
+  else if ('vacrooms' in b.dataset && vacSel.size) {
+    const names = d.vac.rooms.filter(r => vacSel.has(r.id)).map(r => r.name);
+    api('vacuum/rooms', { ids: [...vacSel] }); toast('Reinige ' + names.join(', ') + ' …'); vacSel.clear(); render();
+  }
 });
 setInterval(() => { if (!busy && view === 'home') render(); }, 30000); // Uhrzeit aktualisieren
 // Fernmodus: Klick auf den Benutzer meldet ab
