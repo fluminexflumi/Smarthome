@@ -1,0 +1,473 @@
+// Smarthome-Dashboard – Oberfläche (Layout im Stil der Vorlage: Seitenleiste, Raumansicht, Kacheln)
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let S = null;            // Zustand vom Server
+let live = false;        // SSE verbunden
+let busy = false;        // Regler wird gerade bedient → nicht neu zeichnen
+let view = 'home';
+let roomId = null;
+try { view = localStorage.getItem('sh.view') || 'home'; } catch {}
+
+// ---------- Icons ----------
+const I = {
+  bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>',
+  blind: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 8h16M4 12h16"/><path d="M12 12v4"/></svg>',
+  tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+  lamp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l3 7H5z"/><path d="M12 10v8M8 21h8"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 2 11.5h3V21h5.5v-6h3v6H19v-9.5h3z"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.3 7a8 8 0 1 0 11.4 0"/></svg>',
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>',
+  minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
+  battery: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 11v2"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>'
+};
+
+// ---------- Server ----------
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+async function api(path, body = {}) {
+  try {
+    const r = await fetch(SH.apiBase + '/api/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await SH.authHeaders()) }, body: JSON.stringify(body) });
+    if (r.status === 401) { SH.showGate('Anmeldung abgelaufen oder nicht berechtigt.'); throw new Error('nicht angemeldet'); }
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'Fehler');
+  } catch (e) { toast('Hat nicht geklappt: ' + e.message); }
+}
+function onState(data) { S = JSON.parse(data); if (!busy) render(); }
+function setLive(v) { if (live !== v) { live = v; if (S) render(); } }
+function connect() {
+  if (!SH.remote) {
+    const es = new EventSource('/api/events');
+    es.onopen = () => setLive(true);
+    es.onmessage = (e) => onState(e.data);
+    es.onerror = () => setLive(false);
+    return;
+  }
+  // Fernmodus: EventSource kann kein Token mitschicken → Live-Strom per fetch lesen
+  (async function stream() {
+    try {
+      const r = await fetch(SH.apiBase + '/api/events', { headers: await SH.authHeaders(), cache: 'no-store' });
+      if (r.status === 401) { setLive(false); SH.showGate('Anmeldung abgelaufen oder nicht berechtigt.'); return; }
+      if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
+      setLive(true);
+      const rd = r.body.getReader(), dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { value, done } = await rd.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+          const data = chunk.split('\n').filter(l => l.startsWith('data: ')).map(l => l.slice(6)).join('\n');
+          if (data) onState(data);
+        }
+      }
+    } catch (e) { if (e.message === 'nicht angemeldet') { setLive(false); return; } }
+    setLive(false);
+    setTimeout(stream, 5000);
+  })();
+}
+
+// ---------- Hilfen ----------
+const pct = (bri) => bri == null ? 0 : Math.max(1, Math.round(bri / 254 * 100));
+const toBri = (p) => Math.max(1, Math.min(254, Math.round(p / 100 * 254)));
+const blindText = (p) => p == null ? '–' : p <= 2 ? 'offen' : p >= 98 ? 'geschlossen' : `${p} % zu`; // TRÅDFRI: 0 = offen
+const sw = (checked, action, color = '', disabled = false, label = '') =>
+  `<label class="switch ${color}" aria-label="${esc(label)}"><input type="checkbox" data-action="${action}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}><span class="track"></span></label>`;
+
+function derive() {
+  const hue = S.hue, ikea = S.ikea, har = S.harmony;
+  const rooms = hue.rooms || [];
+  if (!rooms.find(r => r.id === roomId)) roomId = rooms[0]?.id ?? null;
+  const room = rooms.find(r => r.id === roomId) || null;
+  const roomLights = room ? room.lights.map(id => hue.lights[id]).filter(Boolean) : [];
+  const allLights = [...Object.values(hue.lights || {}), ...(ikea.lights || [])];
+  const blinds = ikea.blinds || [];
+  const reachBlinds = blinds.filter(b => b.reachable);
+  const actId = har.currentActivity;
+  const actOn = har.ok && !!actId && actId !== '-1';
+  const actLabel = !har.ok ? 'Offline' : actOn ? (har.activities.find(a => a.id === actId)?.label || `Aktivität ${actId}`) : 'Aus';
+  const onLights = allLights.filter(l => l.on && l.reachable !== false);
+  const roomOnLights = roomLights.filter(l => l.on && l.reachable);
+  const dimOn = roomOnLights.filter(l => l.bri != null);
+  const roomPct = room && room.anyOn ? (dimOn.length ? Math.round(dimOn.reduce((a, l) => a + pct(l.bri), 0) / dimOn.length) : 100) : 0;
+  const lowBatt = blinds.filter(b => b.battery != null && b.battery < 20);
+  const openBlinds = blinds.filter(b => b.position != null && b.position <= 2);
+  return { hue, ikea, har, rooms, room, roomLights, allLights, blinds, reachBlinds, actId, actOn, actLabel, onLights, roomPct, lowBatt, openBlinds };
+}
+
+// ---------- Rahmen ----------
+function renderFrame(d) {
+  const pill = (name, ok) => `<span class="pill ${S ? (ok ? '' : 'down') : 'wait'}"><i></i>${name}</span>`;
+  $('#pills').innerHTML = pill('Hue', d.hue.ok) + pill('IKEA', d.ikea.ok) + pill('Harmony', d.har.ok) + pill(live ? 'Live' : 'Getrennt', live);
+  const n = d.lowBatt.length + d.blinds.filter(b => !b.reachable).length;
+  const badge = $('#bell-badge'); badge.hidden = !n; badge.textContent = n;
+  $('#bell').title = [...d.lowBatt.map(b => `${b.name}: Batterie ${b.battery} %`), ...d.blinds.filter(b => !b.reachable).map(b => `${b.name}: nicht erreichbar`)].join('\n') || 'Keine Hinweise';
+  $('#foot-updated').textContent = 'Stand ' + new Date(S.updated).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+}
+
+// ---------- Home ----------
+function greetCard(d) {
+  const now = new Date(), h = now.getHours();
+  const day = h >= 7 && h < 18;
+  const hello = h < 5 ? 'Gute Nacht' : h < 11 ? 'Guten Morgen' : h < 14 ? 'Guten Tag' : h < 18 ? 'Guten Nachmittag' : h < 22 ? 'Guten Abend' : 'Gute Nacht';
+  const date = now.toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const icon = day
+    ? `<svg class="greet-icon" viewBox="0 0 64 64"><circle cx="26" cy="24" r="12" fill="#ffc24a"/><g stroke="#ffc24a" stroke-width="3" stroke-linecap="round"><path d="M26 4v5M26 39v5M8 24h5M6 10l4 4M42 10l-4 4"/></g><path d="M22 52h28a9 9 0 0 0 0-18 12 12 0 0 0-23 3 7.5 7.5 0 0 0-5 15z" fill="#eef3fb"/></svg>`
+    : `<svg class="greet-icon" viewBox="0 0 64 64"><path d="M40 10a20 20 0 1 0 14 34A22 22 0 0 1 40 10z" fill="#ffd48a"/><circle cx="14" cy="14" r="1.6" fill="#fff"/><circle cx="56" cy="20" r="1.2" fill="#fff"/><circle cx="20" cy="52" r="1" fill="#fff"/></svg>`;
+  return `<section class="card greet a-greet ${day ? 'day' : ''}">
+    <svg class="scenery" viewBox="0 0 400 240" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+      ${day ? '<circle cx="330" cy="120" r="22" fill="#ffd27a" opacity=".9"/>' : '<circle cx="250" cy="40" r="1.2" fill="#fff" opacity=".7"/><circle cx="310" cy="70" r="1" fill="#fff" opacity=".6"/><circle cx="370" cy="30" r="1.4" fill="#fff" opacity=".8"/>'}
+      <path d="M0 175 60 140 110 160 170 120 230 155 290 130 350 150 400 135V240H0z" fill="${day ? '#3d5f86' : '#24324a'}" opacity=".9"/>
+      <path d="M0 195 70 170 140 185 220 160 300 182 400 165V240H0z" fill="${day ? '#2c4767' : '#1a2537'}"/>
+      <path d="M0 215 120 205 260 212 400 200V240H0z" fill="#121a26"/>
+    </svg>
+    <div class="greet-top"><span>${I.pin.replace('<svg', '<svg width="15" height="15"')} Zuhause</span><span>${esc(date)}</span></div>
+    <div class="greet-main">${icon}<div><div class="greet-time">${now.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })}</div><div class="greet-hello">${hello}, Toni</div></div></div>
+    <div class="greet-stats">
+      <div class="gstat"><div class="ic">${I.bulb}</div><div><div class="k">Lichter</div><div class="v">${d.onLights.length} / ${d.allLights.length} an</div></div></div>
+      <div class="gstat"><div class="ic">${I.blind}</div><div><div class="k">Rollos</div><div class="v">${d.openBlinds.length} / ${d.blinds.length} offen</div></div></div>
+      <div class="gstat"><div class="ic">${I.tv}</div><div style="min-width:0"><div class="k">Harmony</div><div class="v">${esc(d.actLabel)}</div></div></div>
+    </div>
+  </section>`;
+}
+
+function blindsCard(d) {
+  const tag = d.lowBatt.length ? `<span class="chip-tag warn">Batterie tief</span>` : `<span class="chip-tag green">${d.openBlinds.length} offen</span>`;
+  const rows = d.blinds.map(b => `<div class="brow ${b.reachable ? '' : 'unreach'}">
+      <div class="brow-name">${esc(b.name)} <small>${b.reachable ? blindText(b.position) : 'nicht erreichbar'}</small></div>
+      <div class="brow-btns">
+        <button class="round" data-blind="${b.id}" data-pos="0" aria-label="${esc(b.name)} hoch" ${b.reachable ? '' : 'disabled'}>${I.up}</button>
+        <button class="round" data-blind="${b.id}" data-pos="100" aria-label="${esc(b.name)} runter" ${b.reachable ? '' : 'disabled'}>${I.down}</button>
+      </div>
+      <div class="brow-bar"><span style="width:${100 - (b.position ?? 0)}%"></span></div>
+      <div class="batt ${b.battery != null && b.battery < 20 ? 'low' : ''}" style="grid-column:1">Batterie ${b.battery ?? '–'} %</div>
+    </div>`).join('');
+  return `<section class="card blinds-card a-blinds">
+    <div class="card-head"><div class="card-title">${I.blind}<div><h3>Rollos</h3><div class="sub">IKEA · Öffnung</div></div></div>${tag}</div>
+    <div class="blind-list">${rows || `<div class="muted">${d.ikea.ok ? 'Keine Rollos gefunden.' : 'IKEA Gateway nicht erreichbar.'}</div>`}</div>
+  </section>`;
+}
+
+function arcPath(cx, cy, r, a0, a1) {
+  const p = (a) => [cx + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)];
+  const [x0, y0] = p(a0), [x1, y1] = p(a1);
+  return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+}
+function dialCard(d) {
+  const on = !!d.room?.anyOn, v = on ? d.roomPct : 0;
+  const A0 = 150, A1 = 390, a = A0 + (A1 - A0) * v / 100;
+  const kx = 120 + 88 * Math.cos(a * Math.PI / 180), ky = 112 + 88 * Math.sin(a * Math.PI / 180);
+  return `<section class="card dial-card a-dial">
+    <div class="card-head"><div class="card-title">${I.sun}<div><h3>Helligkeit</h3><div class="sub">${esc(d.room?.name || '–')}</div></div></div>
+      <button class="chip-tag outline btn" data-room-toggle>${on ? 'Ausschalten' : 'Einschalten'}</button></div>
+    <div class="dial-wrap">
+      <svg class="dial-svg" viewBox="0 0 240 210" aria-hidden="true">
+        <defs><linearGradient id="dg" x1="0" x2="1"><stop offset="0" stop-color="#e0782f"/><stop offset=".6" stop-color="#ffb15c"/><stop offset="1" stop-color="#3cc7b7"/></linearGradient></defs>
+        <path d="${arcPath(120, 112, 88, A0, A1)}" stroke="rgba(255,255,255,.1)" stroke-width="14" fill="none" stroke-linecap="round"/>
+        ${v > 0 ? `<path d="${arcPath(120, 112, 88, A0, Math.max(a, A0 + 0.5))}" stroke="url(#dg)" stroke-width="14" fill="none" stroke-linecap="round"/>` : ''}
+        <circle cx="${kx.toFixed(1)}" cy="${ky.toFixed(1)}" r="11" fill="#fff" stroke="rgba(0,0,0,.25)" stroke-width="2"/>
+      </svg>
+      <div class="dial-center"><div class="dial-val">${v}<small> %</small></div><div class="dial-state">${on ? `${d.roomLights.filter(l => l.on).length} Lampen an` : 'Aus'}</div></div>
+      <div class="dial-btns">
+        <button class="round" data-dial="-10" aria-label="Dunkler">${I.minus}</button>
+        <button class="round" data-dial="10" aria-label="Heller">${I.plus}</button>
+      </div>
+    </div>
+  </section>`;
+}
+
+function roomSvg(d) {
+  const h = new Date().getHours(), day = h >= 7 && h < 18;
+  const light = d.room?.anyOn ? Math.max(.25, d.roomPct / 100) : 0;
+  const tvOn = d.actOn;
+  const wins = (d.blinds.length ? d.blinds : [{ position: 0 }]).slice(0, 3);
+  const W = 104, gap = 22, x0 = 40;
+  const windows = wins.map((b, i) => {
+    const x = x0 + i * (W + gap), y = 96, H = 190, sh = H * Math.min(100, b.position ?? 0) / 100;
+    return `<g>
+      <rect x="${x - 6}" y="${y - 6}" width="${W + 12}" height="${H + 12}" rx="6" fill="#0d0a08"/>
+      <rect x="${x}" y="${y}" width="${W}" height="${H}" fill="url(#sky)"/>
+      ${day ? '' : `<circle cx="${x + 70}" cy="${y + 40}" r="1.4" fill="#fff" opacity=".8"/><circle cx="${x + 30}" cy="${y + 70}" r="1" fill="#fff" opacity=".6"/>`}
+      <path d="M${x} ${y + H - 40} l30 -22 30 14 44 -26 V${y + H} H${x}z" fill="#0e1622" opacity=".9"/>
+      <rect x="${x}" y="${y}" width="${W}" height="${sh.toFixed(1)}" fill="url(#slats)"/>
+      <rect x="${x}" y="${(y + sh - 4).toFixed(1)}" width="${W}" height="5" fill="#8b8f96"/>
+      <rect x="${x + W / 2 - 1.5}" y="${y}" width="3" height="${H}" fill="#0d0a08"/>
+    </g>`;
+  }).join('');
+  return `<svg class="room-svg" viewBox="0 0 800 440" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d1611"/><stop offset="1" stop-color="#120d0a"/></linearGradient>
+      <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1e15"/><stop offset="1" stop-color="#140e0a"/></linearGradient>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">${day ? '<stop offset="0" stop-color="#5d9ad6"/><stop offset="1" stop-color="#b8d4ee"/>' : '<stop offset="0" stop-color="#0b1626"/><stop offset="1" stop-color="#22385a"/>'}</linearGradient>
+      <pattern id="slats" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#b9bcc2"/><rect y="6.5" width="8" height="1.5" fill="#8f939a"/></pattern>
+      <radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffb35c" stop-opacity=".95"/><stop offset=".45" stop-color="#ff9a3c" stop-opacity=".35"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient>
+      <radialGradient id="tvglow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#5c9dff" stop-opacity=".7"/><stop offset="1" stop-color="#5c9dff" stop-opacity="0"/></radialGradient>
+      <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2d5fb0"/><stop offset=".5" stop-color="#6a4fc7"/><stop offset="1" stop-color="#e0782f"/></linearGradient>
+      <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></linearGradient>
+    </defs>
+    <rect width="800" height="440" fill="url(#wall)"/>
+    <rect y="330" width="800" height="110" fill="url(#floor)"/>
+    ${windows}
+    <!-- Regal + TV -->
+    <rect x="430" y="150" width="190" height="112" rx="6" fill="#07080b" stroke="#2a2a2e" stroke-width="3"/>
+    ${tvOn ? `<ellipse cx="525" cy="206" rx="180" ry="120" fill="url(#tvglow)"/><rect x="436" y="156" width="178" height="100" rx="3" fill="url(#screen)" opacity=".9"/>` : ''}
+    <rect x="420" y="300" width="210" height="34" rx="4" fill="#2b1f16"/>
+    <!-- Stehlampe -->
+    <path d="M712 334 V170 q0 -40 -46 -40" stroke="#1b1b1e" stroke-width="5" fill="none"/>
+    <path d="M640 128 h52 l-8 -20 h-36z" fill="#2a2a2e"/>
+    ${light ? `<ellipse cx="666" cy="150" rx="${120 + 80 * light}" ry="${110 + 70 * light}" fill="url(#glow)" opacity="${(.45 + .55 * light).toFixed(2)}"/><ellipse cx="666" cy="132" rx="22" ry="6" fill="#ffd9a0"/>` : ''}
+    <ellipse cx="712" cy="336" rx="26" ry="5" fill="#0a0806"/>
+    <!-- Pflanze -->
+    <rect x="360" y="296" width="34" height="38" rx="4" fill="#3a2a1e"/>
+    <path d="M377 296 q-30 -40 -14 -80 q10 30 14 80 q4 -60 26 -84 q-6 50 -26 84" fill="#2f5a34"/>
+    <!-- Sofa -->
+    <ellipse cx="420" cy="410" rx="300" ry="26" fill="#0b0806" opacity=".7"/>
+    <rect x="170" y="318" width="470" height="80" rx="26" fill="#8c8a86"/>
+    <rect x="186" y="290" width="438" height="64" rx="22" fill="#a3a19c"/>
+    <rect x="150" y="320" width="54" height="84" rx="22" fill="#97958f"/>
+    <rect x="606" y="320" width="54" height="84" rx="22" fill="#97958f"/>
+    <rect x="236" y="300" width="70" height="44" rx="12" fill="#c8682a"/>
+    <rect x="510" y="300" width="70" height="44" rx="12" fill="#3f6b4e"/>
+    <!-- Deckenlicht-Ambiente -->
+    <rect width="800" height="440" fill="#ff9a3c" opacity="${(light * .12).toFixed(3)}"/>
+    <rect width="800" height="440" fill="#000" opacity="${light ? (.25 - light * .2).toFixed(3) : .45}"/>
+    <rect width="800" height="440" fill="url(#shade)"/>
+  </svg>`;
+}
+
+function heroCard(d) {
+  const ikeaLamp = d.ikea.lights?.[0];
+  const anyOpen = d.reachBlinds.some(b => (b.position ?? 100) < 98);
+  const nodes = [
+    { x: 24, y: 22, k: 'light', on: !!d.room?.anyOn, icon: I.bulb, label: 'Licht' },
+    { x: 24, y: 80, k: 'blinds', on: anyOpen, icon: I.blind, label: 'Rollos' },
+    { x: 76, y: 22, k: 'tv', on: d.actOn, icon: I.tv, label: 'Harmony' },
+    { x: 76, y: 80, k: 'ikealamp', on: !!(ikeaLamp?.on && ikeaLamp?.reachable), icon: I.lamp, label: ikeaLamp ? ikeaLamp.name : 'IKEA' }
+  ];
+  const lines = nodes.map(n => `<path d="M50 50 H${(n.x + (n.x < 50 ? 6 : -6))} V${n.y}" vector-effect="non-scaling-stroke"/>`).join('');
+  const scenes = (d.hue.scenes || []).filter(s => s.group === d.room?.id).slice(0, 3);
+  const v = d.room?.anyOn ? d.roomPct : 0;
+  return `<section class="card hero a-hero">
+    ${roomSvg(d)}
+    <div class="hero-top">${d.rooms.map(r => `<button class="tab ${r.id === d.room?.id ? 'active' : ''}" data-room="${r.id}">${r.id === d.room?.id ? I.home : ''}${esc(r.name)}</button>`).join('')}
+      <button class="tab" data-goto="rollos">Rollos</button><button class="tab" data-goto="szenen">Szenen</button></div>
+    <div class="hub">
+      <svg class="hub-lines" viewBox="0 0 100 100" preserveAspectRatio="none"><g stroke="rgba(255,255,255,.45)" stroke-width="1.2" fill="none" vector-effect="non-scaling-stroke" style="vector-effect:non-scaling-stroke">${lines}</g></svg>
+      <div class="node center" style="left:50%;top:50%">${I.home}</div>
+      ${nodes.map(n => `<button class="node ${n.on ? 'on' : ''}" style="left:${n.x}%;top:${n.y}%" data-node="${n.k}" aria-label="${esc(n.label)} umschalten">${n.icon}<span class="node-label">${esc(n.label)}</span></button>`).join('')}
+    </div>
+    <div class="vslider-box">
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <div class="pct" id="vs-pct">${v} %</div>
+      <div class="vslider" id="vslider" role="slider" aria-label="Helligkeit ${esc(d.room?.name || '')}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${v}" tabindex="0">
+        <div class="fill" style="height:${v}%"></div><div class="knob" style="bottom:${v}%"></div>
+      </div>
+      <button class="power ${d.room?.anyOn ? 'on' : ''}" data-room-toggle aria-label="Raum ein/aus">${I.power}</button>
+    </div>
+    <div class="hero-bottom">
+      <span class="glass ${live ? 'ok' : ''}"><i class="live"></i>${live ? 'Live' : 'Getrennt'}</span>
+      <div class="scene-strip">
+        ${scenes.map(s => `<button class="glass" data-scene="${esc(s.id)}">${I.play}${esc(s.name)}</button>`).join('')}
+        <button class="glass" data-goto="licht">${I.grid}Alle Szenen</button>
+      </div>
+    </div>
+  </section>`;
+}
+
+function tilesCard(d) {
+  const ikeaLamp = d.ikea.lights?.[0];
+  const anyOpen = d.reachBlinds.some(b => (b.position ?? 100) < 98);
+  const tile = (color, on, icon, name, sub, foot, action, disabled = false) => `
+    <div class="tile ${color} ${on ? 'on' : ''} ${disabled ? 'unreach' : ''}">
+      <div class="tile-top"><div class="tile-ic">${icon}</div>${sw(on, action, color, disabled, name)}</div>
+      <div class="tile-name">${esc(name)}</div><div class="tile-sub">${esc(sub)}</div>
+      <div class="tile-foot"><i></i>${esc(foot)}</div>
+    </div>`;
+  return `<section class="tiles a-tiles">
+    ${tile('orange', !!d.room?.anyOn, I.bulb, 'Licht', d.room?.name || 'Hue', d.room?.anyOn ? `${d.roomPct} % · ${d.roomLights.filter(l => l.on).length} an` : 'Aus', `tile/light`)}
+    ${tile('blue', anyOpen, I.blind, 'Rollos', 'Alle Fenster', `${d.openBlinds.length} offen · ${d.blinds.length - d.openBlinds.length} zu`, 'tile/blinds', !d.reachBlinds.length)}
+    ${tile('purple', d.actOn, I.tv, 'Harmony', d.actLabel, d.har.ok ? (d.actOn ? 'Läuft' : 'Aus') : 'Offline', 'tile/tv', !d.har.ok)}
+    ${tile('green', !!(ikeaLamp?.on && ikeaLamp?.reachable), I.lamp, ikeaLamp?.name || 'IKEA-Lampe', 'IKEA', ikeaLamp?.reachable ? (ikeaLamp.on ? 'An' : 'Aus') : 'Nicht erreichbar', 'tile/ikealamp', !ikeaLamp?.reachable)}
+  </section>`;
+}
+
+function chartCard(d) {
+  const ls = d.roomLights;
+  const vals = ls.map(l => (l.on && l.reachable) ? (l.bri == null ? 100 : pct(l.bri)) : 0);
+  const max = Math.max(...vals, 0);
+  const maxIdx = vals.indexOf(max);
+  const avg = d.roomPct;
+  const bars = ls.map((l, i) => `<div class="bar ${vals[i] === 0 ? 'off' : i === maxIdx ? 'max' : ''}" title="${esc(l.name)}: ${vals[i]} %">
+      ${i === maxIdx && max > 0 ? `<span class="tip" style="bottom:calc(${Math.max(vals[i], 3)}% + 6px);top:auto">${vals[i]} %</span>` : ''}
+      <div class="col" style="height:${Math.max(vals[i], 3)}%"></div><span class="lbl">${esc(l.name.split(' ')[0])}</span></div>`).join('');
+  return `<section class="card chart-card a-chart">
+    <div class="card-head"><div class="card-title">${I.bolt}<h3>Helligkeit pro Lampe</h3></div><span class="chip-tag outline">${esc(d.room?.name || '')}</span></div>
+    <div class="chart-big"><b>${d.roomLights.filter(l => l.on && l.reachable).length}</b><span>von ${ls.length} Lampen an</span></div>
+    <div class="chart-delta">Ø ${avg} % Helligkeit</div>
+    <div class="bars">
+      <div class="y-axis"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>
+      <div class="bar-area">
+        ${[0, 25, 50, 75].map(p => `<div class="grid-line" style="bottom:calc(22px + (100% - 22px) * ${p / 100})"></div>`).join('')}
+        ${bars}
+      </div>
+    </div>
+  </section>`;
+}
+
+function renderHome(d) {
+  return `<div class="home">${greetCard(d)}${heroCard(d)}${blindsCard(d)}${dialCard(d)}${tilesCard(d)}${chartCard(d)}</div>`;
+}
+
+// ---------- Detailansichten ----------
+function renderLicht(d) {
+  let h = `<div class="view-head"><h2>Licht</h2><span class="muted">${d.onLights.length} von ${d.allLights.length} an</span></div>`;
+  for (const room of d.rooms) {
+    const ls = room.lights.map(id => d.hue.lights[id]).filter(Boolean);
+    const scenes = (d.hue.scenes || []).filter(s => s.group === room.id);
+    h += `<div class="card row-card" style="margin-bottom:14px">
+      <div class="row-top"><div><div class="nm">${esc(room.name)}</div><div class="sub">${ls.filter(l => l.on).length} von ${ls.length} an</div></div>${sw(room.anyOn, `hue/room/${room.id}`, '', false, room.name)}</div>
+      ${room.anyOn ? `<input type="range" min="1" max="254" value="${room.bri ?? 254}" data-action="hue/room/${room.id}" aria-label="Helligkeit ${esc(room.name)}">` : ''}
+      ${scenes.length ? `<div class="chips">${scenes.map(s => `<button class="chip" data-scene="${esc(s.id)}">${esc(s.name)}</button>`).join('')}</div>` : ''}
+    </div>
+    <div class="list-grid">${ls.map(l => lightCard(l, 'hue/light', 254)).join('')}</div>`;
+  }
+  if (d.ikea.lights?.length) h += `<div class="section-title">IKEA</div><div class="list-grid">${d.ikea.lights.map(l => lightCard(l, 'ikea/light', 100)).join('')}</div>`;
+  return h;
+}
+function lightCard(l, base, max) {
+  return `<div class="card row-card ${l.reachable ? '' : 'unreach'}" style="${l.reachable ? '' : 'opacity:.55'}">
+    <div class="row-top"><div class="nm">${esc(l.name)}</div>${sw(l.on, `${base}/${l.id}`, '', !l.reachable, l.name)}</div>
+    ${!l.reachable ? '<div class="muted">nicht erreichbar</div>' : l.on && l.bri != null ? `<input type="range" min="1" max="${max}" value="${l.bri}" data-action="${base}/${l.id}" aria-label="Helligkeit ${esc(l.name)}">` : '<div class="muted">Aus</div>'}
+  </div>`;
+}
+function renderRollos(d) {
+  return `<div class="view-head"><h2>Rollos</h2><div class="chips"><button class="chip" data-allblinds="0">Alle hoch</button><button class="chip" data-allblinds="100">Alle runter</button></div></div>
+  <div class="list-grid">${d.blinds.map(b => `<div class="card row-card" style="${b.reachable ? '' : 'opacity:.55'}">
+    <div class="row-top"><div><div class="nm">${esc(b.name)}</div><div class="sub">${b.reachable ? blindText(b.position) : 'nicht erreichbar'} · <span class="batt ${b.battery != null && b.battery < 20 ? 'low' : ''}" style="color:inherit">Batterie ${b.battery ?? '–'} %</span></div></div>
+      <div class="brow-btns" style="grid-row:auto">
+        <button class="round" data-blind="${b.id}" data-pos="0" aria-label="hoch" ${b.reachable ? '' : 'disabled'}>${I.up}</button>
+        <button class="round" data-blind="${b.id}" data-stop="1" aria-label="stopp" ${b.reachable ? '' : 'disabled'}>${I.stop}</button>
+        <button class="round" data-blind="${b.id}" data-pos="100" aria-label="runter" ${b.reachable ? '' : 'disabled'}>${I.down}</button>
+      </div></div>
+    <input class="blue-range" type="range" min="0" max="100" value="${b.position ?? 0}" data-action="ikea/blind/${b.id}" aria-label="Position ${esc(b.name)}" ${b.reachable ? '' : 'disabled'}>
+    <div class="muted" style="display:flex;justify-content:space-between"><span>offen</span><span>geschlossen</span></div>
+  </div>`).join('') || '<p class="muted">Keine Rollos gefunden.</p>'}</div>`;
+}
+function renderSzenen(d) {
+  const acts = d.har.activities || [];
+  return `<div class="view-head"><h2>Szenen</h2></div>
+  <div class="card row-card" style="margin-bottom:14px">
+    <div class="row-top"><div><div class="sub">Harmony – läuft gerade</div><div class="nm" style="font-size:20px">${esc(d.actLabel)}</div></div>
+      <button class="chip danger" data-harmony-off ${d.actOn && d.har.ok ? '' : 'disabled'}>Alles aus</button></div>
+    ${acts.length ? `<div class="chips">${acts.map(a => `<button class="chip ${a.id === d.actId ? 'active' : ''}" data-activity="${esc(a.id)}" ${d.har.ok ? '' : 'disabled'}>${esc(a.label)}</button>`).join('')}</div>` : ''}
+    <div class="muted">${d.har.ok ? 'Neue Szenen erscheinen hier automatisch, sobald sie einmal über die Fernbedienung gestartet wurden.' : 'Harmony Hub nicht erreichbar.'}</div>
+  </div>
+  ${d.rooms.map(r => `<div class="card row-card" style="margin-bottom:14px"><div class="sub">Hue – ${esc(r.name)}</div>
+    <div class="chips">${(d.hue.scenes || []).filter(s => s.group === r.id).map(s => `<button class="chip" data-scene="${esc(s.id)}">${esc(s.name)}</button>`).join('')}</div></div>`).join('')}`;
+}
+
+// ---------- Rendern ----------
+function render() {
+  if (!S) return;
+  const d = derive();
+  renderFrame(d);
+  const v = { home: renderHome, licht: renderLicht, rollos: renderRollos, szenen: renderSzenen }[view] || renderHome;
+  $('#view').innerHTML = v(d);
+  bindVSlider(d);
+}
+
+// ---------- Vertikaler Regler ----------
+function bindVSlider(d) {
+  const el = $('#vslider'); if (!el || !d.room) return;
+  const fill = $('.fill', el), knob = $('.knob', el), out = $('#vs-pct');
+  let val = d.room.anyOn ? d.roomPct : 0;
+  const set = (p) => { val = Math.max(0, Math.min(100, Math.round(p))); fill.style.height = val + '%'; knob.style.bottom = val + '%'; out.textContent = val + ' %'; };
+  const fromEvent = (e) => { const r = el.getBoundingClientRect(); set((r.bottom - e.clientY) / r.height * 100); };
+  const commit = () => { busy = false; api(`hue/room/${d.room.id}`, val === 0 ? { on: false } : { bri: toBri(val) }); };
+  el.addEventListener('pointerdown', (e) => { busy = true; el.setPointerCapture(e.pointerId); fromEvent(e); });
+  el.addEventListener('pointermove', (e) => { if (el.hasPointerCapture(e.pointerId)) fromEvent(e); });
+  el.addEventListener('pointerup', (e) => { el.releasePointerCapture(e.pointerId); commit(); });
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { set(val + 5); commit(); e.preventDefault(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { set(val - 5); commit(); e.preventDefault(); }
+  });
+}
+
+// ---------- Bedienung ----------
+let dialTimer = null, dialTarget = null;
+function blindsAll(pos) { (S.ikea.blinds || []).filter(x => x.reachable).forEach(x => api('ikea/blind/' + x.id, { position: pos })); }
+function toggleTv(d) {
+  if (d.actOn) { api('harmony/off'); toast('Schalte alles aus …'); return; }
+  const a = d.har.activities?.[0];
+  if (!a) { toast('Noch keine Harmony-Szene bekannt.'); return; }
+  api('harmony/activity/' + a.id); toast('Starte „' + a.label + '“ …');
+}
+function toggleIkeaLamp(d, on) { const l = d.ikea.lights?.[0]; if (l?.reachable) api('ikea/light/' + l.id, { on: on ?? !l.on }); }
+
+document.addEventListener('change', (e) => {
+  const el = e.target, a = el.dataset.action;
+  if (!a || !S) return;
+  const d = derive();
+  if (a.startsWith('tile/')) {
+    const k = a.slice(5), on = el.checked;
+    if (k === 'light' && d.room) api(`hue/room/${d.room.id}`, { on });
+    if (k === 'blinds') blindsAll(on ? 0 : 100);
+    if (k === 'tv') toggleTv(d);
+    if (k === 'ikealamp') toggleIkeaLamp(d, on);
+    return;
+  }
+  if (el.type === 'checkbox') api(a, { on: el.checked });
+  if (el.type === 'range') {
+    busy = false;
+    api(a, a.startsWith('ikea/blind') ? { position: Number(el.value) } : { bri: Number(el.value) });
+  }
+});
+document.addEventListener('pointerdown', (e) => { if (e.target.type === 'range') busy = true; });
+document.addEventListener('pointerup', () => { if (busy && !$('#vslider')?.matches(':active')) setTimeout(() => { busy = false; render(); }, 500); });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b || !S) return;
+  const d = derive();
+  if (b.dataset.view) { view = b.dataset.view; try { localStorage.setItem('sh.view', view); } catch {} render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  else if (b.dataset.goto) { view = b.dataset.goto; try { localStorage.setItem('sh.view', view); } catch {} render(); window.scrollTo({ top: 0 }); }
+  else if (b.dataset.room) { roomId = b.dataset.room; render(); }
+  else if ('roomToggle' in b.dataset && d.room) api(`hue/room/${d.room.id}`, { on: !d.room.anyOn });
+  else if (b.dataset.dial && d.room) {
+    const base = dialTarget ?? (d.room.anyOn ? d.roomPct : 0);
+    dialTarget = Math.max(0, Math.min(100, base + Number(b.dataset.dial)));
+    $('.dial-val').innerHTML = `${dialTarget}<small> %</small>`;
+    clearTimeout(dialTimer);
+    dialTimer = setTimeout(() => { api(`hue/room/${d.room.id}`, dialTarget === 0 ? { on: false } : { bri: toBri(dialTarget) }); dialTarget = null; }, 350);
+  }
+  else if (b.dataset.node) {
+    const k = b.dataset.node;
+    if (k === 'light' && d.room) api(`hue/room/${d.room.id}`, { on: !d.room.anyOn });
+    if (k === 'blinds') blindsAll(d.reachBlinds.some(x => (x.position ?? 100) < 98) ? 100 : 0);
+    if (k === 'tv') toggleTv(d);
+    if (k === 'ikealamp') toggleIkeaLamp(d);
+  }
+  else if (b.dataset.scene) { api('hue/scene/' + b.dataset.scene); toast('Szene „' + b.textContent.trim() + '“'); }
+  else if (b.dataset.blind) api('ikea/blind/' + b.dataset.blind, b.dataset.stop ? { stop: true } : { position: Number(b.dataset.pos) });
+  else if (b.dataset.allblinds) blindsAll(Number(b.dataset.allblinds));
+  else if (b.dataset.activity) { api('harmony/activity/' + b.dataset.activity); toast('Starte „' + b.textContent.trim() + '“ …'); }
+  else if ('harmonyOff' in b.dataset) { api('harmony/off'); toast('Schalte alles aus …'); }
+});
+setInterval(() => { if (!busy && view === 'home') render(); }, 30000); // Uhrzeit aktualisieren
+// Fernmodus: Klick auf den Benutzer meldet ab
+if (SH.remote) {
+  const u = $('.user'); u.title = 'Abmelden'; u.style.cursor = 'pointer';
+  u.addEventListener('click', () => { if (confirm('Abmelden?')) SH.logout(); });
+  const sub = $('.user-sub'); if (sub) sub.textContent = 'Unterwegs';
+}
+SH.ready.then(ok => { if (ok) connect(); });
