@@ -126,6 +126,30 @@ main { grid-area: main; min-width: 0; }
 .chip.accent { background: var(--teal); border-color: transparent; color: #04211e; font-weight: 600; }
 .chip.accent:disabled { background: var(--card-2); color: var(--muted); }
 
+.chip.vsel { background: var(--teal); border-color: transparent; color: #04211e; font-weight: 600; }
+
+/* Grundriss Saugroboter */
+.vmap-wrap { border-radius: 18px; background: #0d131b; border: 1px solid var(--line); padding: 12px; }
+.vmap { width: 100%; height: auto; max-height: 520px; }
+.vmap-room { cursor: pointer; outline: none; }
+.vmap-room polygon { fill: #2b4a78; stroke: #0d131b; stroke-width: 6; stroke-linejoin: round; transition: fill .15s; }
+.vmap-room:nth-child(3n+1) polygon { fill: #335a90; }
+.vmap-room:nth-child(3n+2) polygon { fill: #284470; }
+.vmap-room:hover polygon { fill: #3d6aa8; }
+.vmap-room.sel polygon { fill: var(--teal); }
+.vmap-room:focus-visible polygon { stroke: #fff; stroke-width: 5; }
+.vmap-room text { fill: #e8eef8; font: 600 32px "Plus Jakarta Sans", system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; pointer-events: none; paint-order: stroke; stroke: rgba(8,12,18,.55); stroke-width: 5px; }
+.vmap-room.sel text { fill: #04211e; stroke: none; }
+.vmap-station { pointer-events: none; }
+.vmap-station rect { fill: #9aa3b1; stroke: #0d131b; stroke-width: 4; }
+.vmap-bot { fill: #f2f5f9; stroke: var(--green); stroke-width: 5; }
+.vmap-bot-eye { fill: #c7ced8; }
+.vmap-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.vmap-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.vmap-legend .sw { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+.vmap-legend .sw.sel { background: var(--teal); }
+.vmap-legend .sw.st { background: #9aa3b1; }
+
 /* Begrüssung (Wetter-Stil) */
 .greet { padding: 0; background: linear-gradient(180deg, #17304f 0%, #233f63 45%, #3a3f5a 70%, #1a2232 100%); min-height: 230px; display: flex; flex-direction: column; }
 .greet.day { background: linear-gradient(180deg, #2f6fb3 0%, #5c97cf 50%, #8fb7d9 72%, #2a3c55 100%); }

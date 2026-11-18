@@ -120,6 +120,44 @@ const VAC_MODES = [[1, 'Saugen'], [2, 'Wischen'], [3, 'Saugen + Wischen'], [4, '
 const VAC_POWER = [[1, 'Leise'], [2, 'Normal'], [3, 'Stark'], [4, 'Max']];
 const VAC_WATER = [[0, 'Aus'], [1, 'Wenig'], [2, 'Mittel'], [3, 'Viel']];
 const vacSel = new Set(); // ausgewählte Räume (bleibt beim Neuzeichnen erhalten)
+// Grundriss, von Hand nach der Karte in Xiaomi Home nachgezeichnet (Koordinaten im viewBox 0 450 985 750).
+// Schlüssel = Raum-ID des Roboters. Ändert sich die Karte in der App, hier anpassen.
+const VAC_MAP = {
+  6:  { p: '294,465 318,465 312,592 345,556 398,560 398,510 418,510 418,690 410,690 410,925 258,925 258,690 265,690 265,612 296,600', l: [334, 800] },   // Nino
+  8:  { p: '425,670 552,670 552,905 460,905 460,775 425,775', l: [506, 835] },                                                                     // Chuchi
+  16: { p: '560,668 975,668 975,895 560,895', l: [768, 785] },                                                                                     // Wohnzimmer
+  4:  { p: '0,718 250,718 250,940 0,940', l: [120, 830] },                                                                                         // Toni
+  13: { p: '45,945 166,945 166,1030 45,1030', l: [105, 990] },                                                                                     // Bad1
+  21: { p: '170,945 254,945 254,966 352,966 352,928 412,928 412,952 488,952 488,902 628,902 628,1068 552,1068 552,1098 486,1098 486,1062 456,1062 456,1030 170,1030', l: [560, 995] }, // Gang
+  14: { p: '328,1036 452,1036 452,1100 328,1100', l: [390, 1070] },                                                                                // Bad2
+  5:  { p: '662,905 985,905 985,1045 662,1045', l: [822, 977] },                                                                                   // Büro
+  20: { p: '5,1040 240,1040 240,1048 305,1048 305,1190 5,1192', l: [140, 1118] }                                                                   // Lelo
+};
+const VAC_STATION = [440, 742];
+const VAC_DOCKED = new Set([2, 3, 9, 12, 13, 14]);
+function vacMap(v) {
+  const rooms = v.rooms.filter(r => VAC_MAP[r.id]);
+  if (!rooms.length) return '';
+  const docked = v.ok && (VAC_DOCKED.has(v.status) || v.charging === 1);
+  const busy = vacOn(v);
+  const shapes = rooms.map(r => {
+    const m = VAC_MAP[r.id], sel = vacSel.has(r.id);
+    return `<g class="vmap-room ${sel ? 'sel' : ''}" data-vacmap="${r.id}" role="button" tabindex="0" aria-pressed="${sel}" aria-label="${esc(r.name)} ${sel ? 'abwählen' : 'auswählen'}">
+      <polygon points="${m.p}"/>
+      <text x="${m.l[0]}" y="${m.l[1]}">${esc(r.name)}</text></g>`;
+  }).join('');
+  const [sx, sy] = VAC_STATION;
+  return `<div class="vmap-wrap">
+    <svg class="vmap" viewBox="-10 450 1005 755" role="group" aria-label="Grundriss, Räume antippen zum Auswählen">
+      ${shapes}
+      <g class="vmap-station" transform="translate(${sx} ${sy})" aria-hidden="true">
+        <rect x="-20" y="-24" width="40" height="34" rx="7"/>
+        ${docked ? `<circle class="vmap-bot" cx="0" cy="16" r="20"/><circle class="vmap-bot-eye" cx="0" cy="16" r="7"/>` : ''}
+      </g>
+    </svg>
+    <div class="vmap-legend"><span><i class="sw sel"></i>ausgewählt</span><span><i class="sw st"></i>Station${docked ? ' · Roboter ist hier' : busy ? ' · Roboter unterwegs' : ''}</span></div>
+  </div>`;
+}
 const vacText = (v) => !v.configured ? 'Nicht eingerichtet' : !v.ok ? 'Nicht erreichbar' : v.faults?.length ? 'Störung' : (VAC_STATUS[v.status] || `Status ${v.status}`);
 const vacOn = (v) => v.ok && (VAC_CLEANING.has(v.status) || v.status === 6);
 
@@ -172,8 +210,9 @@ function renderSauger(d) {
     <div class="vac-btns">${vacButtons(v, true)}<button class="round big" data-vac="stop" aria-label="Stopp" title="Stopp" ${dis}>${I.stop}</button></div>
   </div>
   <div class="card row-card" style="margin-bottom:14px">
-    <div class="row-top"><div><div class="nm">Räume reinigen</div><div class="sub">Räume antippen, dann starten. Es gelten die Einstellungen unten.</div></div></div>
-    <div class="chips">${v.rooms.map(r => `<button class="chip ${vacSel.has(r.id) ? 'active' : ''}" data-vacroom="${r.id}" ${dis}>${esc(r.name)}</button>`).join('') || '<span class="muted">Noch keine Räume bekannt.</span>'}</div>
+    <div class="row-top"><div><div class="nm">Räume reinigen</div><div class="sub">Räume im Plan oder unten antippen, dann starten. Es gelten die Einstellungen unten.</div></div></div>
+    ${vacMap(v)}
+    <div class="chips">${v.rooms.map(r => `<button class="chip ${vacSel.has(r.id) ? 'vsel' : ''}" aria-pressed="${vacSel.has(r.id)}" data-vacroom="${r.id}" ${dis}>${esc(r.name)}</button>`).join('') || '<span class="muted">Noch keine Räume bekannt.</span>'}</div>
     <div class="chips"><button class="chip accent" data-vacrooms ${vacSel.size && v.ok ? '' : 'disabled'}>${I.play.replace('<svg', '<svg width="14" height="14" style="display:inline;vertical-align:-2px;margin-right:6px"')}${vacSel.size ? `${vacSel.size} ${vacSel.size === 1 ? 'Raum' : 'Räume'} reinigen` : 'Raum wählen'}</button>
       ${vacSel.size ? '<button class="chip" data-vacclear>Auswahl löschen</button>' : ''}</div>
   </div>
@@ -518,7 +557,16 @@ document.addEventListener('change', (e) => {
 });
 document.addEventListener('pointerdown', (e) => { if (e.target.type === 'range') busy = true; });
 document.addEventListener('pointerup', () => { if (busy && !$('#vslider')?.matches(':active')) setTimeout(() => { busy = false; render(); }, 500); });
+function vacToggleRoom(id) { if (!S?.vacuum?.ok) return; vacSel.has(id) ? vacSel.delete(id) : vacSel.add(id); render(); }
+document.addEventListener('keydown', (e) => {
+  const g = e.target.closest?.('[data-vacmap]');
+  if (g && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault(); const id = g.dataset.vacmap; vacToggleRoom(Number(id));
+    $(`[data-vacmap="${id}"]`)?.focus();
+  }
+});
 document.addEventListener('click', (e) => {
+  const g = e.target.closest('[data-vacmap]'); if (g) return vacToggleRoom(Number(g.dataset.vacmap));
   const b = e.target.closest('button'); if (!b || !S) return;
   const d = derive();
   if (b.dataset.view) { view = b.dataset.view; try { localStorage.setItem('sh.view', view); } catch {} render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
@@ -549,7 +597,7 @@ document.addEventListener('click', (e) => {
     api('vacuum/cmd/' + b.dataset.vac); toast(names[b.dataset.vac] || 'Gesendet');
   }
   else if (b.dataset.vacset) api('vacuum/set', { [b.dataset.vacset]: Number(b.dataset.val) });
-  else if (b.dataset.vacroom) { const id = Number(b.dataset.vacroom); vacSel.has(id) ? vacSel.delete(id) : vacSel.add(id); render(); }
+  else if (b.dataset.vacroom) vacToggleRoom(Number(b.dataset.vacroom));
   else if ('vacclear' in b.dataset) { vacSel.clear(); render(); }
   else if ('vacrooms' in b.dataset && vacSel.size) {
     const names = d.vac.rooms.filter(r => vacSel.has(r.id)).map(r => r.name);
