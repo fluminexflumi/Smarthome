@@ -37,6 +37,67 @@
 .hist-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 .hist-empty { margin-top: 12px; font-size: 12.5px; }
 
+/* ---------- Vorschauen in der Layout-Auswahl (Raster aus LAYOUT_PREVIEW, Bereiche a–h) ---------- */
+.lp i { position: relative; overflow: hidden; }
+/* Villa: Nachtblau, Kennzahlen, Haus bei Nacht, Raumliste mit Schaltern */
+.lp-villa { background: #0b1120; }
+.lp-villa i { background: #141d33; }
+.lp-villa .c-a { background: repeating-linear-gradient(90deg, #1a2440 0 22%, transparent 22% 25%); }
+.lp-villa .c-b { background: repeating-linear-gradient(180deg, #1a2440 0 9px, #141d33 9px 12px); }
+.lp-villa .c-b::after { content: ""; position: absolute; right: 4px; top: 2px; width: 9px; height: 5px; border-radius: 3px; background: #3a7bff; box-shadow: 0 12px 0 #3a7bff, 0 24px 0 #2a3350, 0 36px 0 #3a7bff, 0 48px 0 #2a3350; }
+.lp-villa .c-c { background: linear-gradient(180deg, #0b1426, #1c2a45 70%, #0f1a12 70%); }
+.lp-villa .c-c::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 26%; height: 42%; background: linear-gradient(180deg, #e9e6df 0 40%, #2a2f38 40%); box-shadow: inset 6px -6px 0 -2px rgba(255,199,122,.9), inset -14px -6px 0 -2px rgba(255,199,122,.7); }
+.lp-villa .c-e { background: radial-gradient(circle at 50% 60%, transparent 30%, #3a7bff 31% 38%, transparent 39%), #141d33; }
+/* Grundriss 3D: Panel links, isometrischer Plan */
+.lp-iso { background: radial-gradient(circle at 70% 40%, #2d2925, #141210 75%); }
+.lp-iso i { background: rgba(255,248,240,.07); }
+.lp-iso .c-a { background: repeating-linear-gradient(180deg, rgba(255,248,240,.12) 0 9px, transparent 9px 13px); }
+.lp-iso .c-b { background:
+  linear-gradient(150deg, transparent 38%, rgba(235,225,212,.35) 38% 40%, transparent 40% 58%, rgba(235,225,212,.35) 58% 60%, transparent 60%),
+  linear-gradient(30deg, transparent 30%, rgba(235,225,212,.35) 30% 32%, transparent 32% 52%, rgba(255,207,138,.55) 52% 70%, transparent 70%),
+  rgba(255,248,240,.06); }
+.lp-iso .c-c { background: rgba(255,248,240,.12); }
+/* Neumorph: weiche Schatten, Cyan-Balken */
+.lp-neo { background: #2a2d32; }
+.lp-neo i { background: #2a2d32; box-shadow: -2px -2px 4px rgba(255,255,255,.05), 3px 3px 6px rgba(0,0,0,.5); }
+.lp-neo .c-b { background: linear-gradient(0deg, #1fb6d6 0 55%, #23262b 55%); box-shadow: inset 2px 2px 5px rgba(0,0,0,.5); }
+.lp-neo .c-d { background: radial-gradient(circle, #2a2d32 38%, transparent 39%), conic-gradient(#1fb6d6 0 70%, #23262b 0); }
+.lp-neo .c-c::after { content: ""; position: absolute; right: 5px; top: 5px; width: 10px; height: 6px; border-radius: 3px; background: #1fb6d6; }
+/* Violett: Raumfoto, Tabelle, Bogen */
+.lp-violett { background: radial-gradient(circle at 20% 0%, rgba(123,92,255,.35), transparent 60%), #0e0b1c; }
+.lp-violett i { background: #17132b; }
+.lp-violett .c-a { background: linear-gradient(180deg, transparent 40%, rgba(14,11,28,.8)), linear-gradient(120deg, #3b2a1e, #6b4a2e 45%, #1c2140); }
+.lp-violett .c-c { background: repeating-linear-gradient(180deg, #201a3b 0 8px, #17132b 8px 11px); }
+.lp-violett .c-b { background: radial-gradient(circle at 50% 70%, #17132b 38%, transparent 39%), conic-gradient(from 240deg, #5aa2ff, #9b7bff, #ff7a59 66%, #2a2346 66%); }
+.lp-violett .c-d { background: linear-gradient(170deg, transparent 55%, #a98bff 55% 60%, transparent 60%), #17132b; }
+/* Terminal: grüne Schrift auf schwarz */
+.lp-terminal { background: #050805; }
+.lp-terminal i { background: #070b07; border: 1px solid rgba(90,247,142,.3); }
+.lp-terminal .c-a { background: repeating-linear-gradient(180deg, transparent 0 4px, rgba(90,247,142,.75) 4px 6px, transparent 6px 9px); background-size: 70% 100%; background-repeat: no-repeat; background-position: 6px 0; }
+.lp-terminal .c-b { background: repeating-linear-gradient(180deg, transparent 0 6px, rgba(90,247,142,.4) 6px 8px, transparent 8px 12px); background-size: 55% 100%; background-repeat: no-repeat; background-position: 6px 4px; }
+.lp-terminal .c-b::after { content: ""; position: absolute; left: 6px; bottom: 6px; width: 8px; height: 10px; background: #5af78e; }
+/* Morgen: Papier, Serifen-Titel, Routinen, Agenda */
+.lp-morgen { background: #f4efe6; }
+.lp-morgen i { background: #fffaf2; box-shadow: 0 1px 3px rgba(60,40,20,.12); }
+.lp-morgen .c-a { background: none; box-shadow: none; }
+.lp-morgen .c-a::before { content: "Guten Morgen"; position: absolute; left: 2px; top: 2px; font: 400 15px/1 Georgia, serif; color: #231d16; white-space: nowrap; }
+.lp-morgen .c-a::after { content: ""; position: absolute; left: 2px; top: 22px; width: 80%; height: 3px; background: #d8cfc2; box-shadow: 0 6px 0 #d8cfc2; }
+.lp-morgen .c-b { background: linear-gradient(90deg, transparent 18%, #d8cfc2 18% 21%, transparent 21%), repeating-linear-gradient(180deg, transparent 0 12px, #4c8dff 12px 15px, transparent 15px 26px); background-color: #fffaf2; }
+.lp-morgen .c-c { border-top: 4px solid #f3b23c; } .lp-morgen .c-d { border-top: 4px solid #4c8dff; }
+.lp-morgen .c-e { border-top: 4px solid #8d7cf8; } .lp-morgen .c-f { border-top: 4px solid #2fbf8f; }
+/* Bauhaus: Primärfarben, grosse Kacheln */
+.lp-bauhaus { background: #efe9dc; gap: 3px; }
+.lp-bauhaus i { border-radius: 0; }
+.lp-bauhaus .c-a { background: radial-gradient(circle at 100% 0, #f2c12e 45%, transparent 46%), #141414; }
+.lp-bauhaus .c-b { background: #f2c12e; }
+.lp-bauhaus .c-c { background: #1f4fa3; }
+.lp-bauhaus .c-c::after { content: "12:00"; position: absolute; left: 4px; bottom: 4px; font: 800 13px/1 "Plus Jakarta Sans", sans-serif; color: #fbf7ee; }
+.lp-bauhaus .c-d { background: #1f4fa3; }
+.lp-bauhaus .c-e { background: #fbf7ee; box-shadow: inset 0 0 0 3px #141414; }
+.lp-bauhaus .c-f { background: #d6392b; }
+.lp-bauhaus .c-g { background: #fbf7ee; box-shadow: inset 0 0 0 3px #1f4fa3; }
+.lp-bauhaus .c-h { background: radial-gradient(circle at 60% 40%, transparent 22%, #f2c12e 23% 30%, transparent 31%), #141414; }
+
 /* ---------- Menüpunkt Kalender ---------- */
 .kal { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 1.3fr); gap: 18px; align-items: start; }
 .kal-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
