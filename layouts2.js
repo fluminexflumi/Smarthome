@@ -39,10 +39,7 @@ Object.assign(I, {
 
 // ---------- gemeinsame Daten ----------
 const lightPct = (l) => !l.on || l.reachable === false ? 0 : l.bri == null ? 100 : typeof l.id === 'number' ? l.bri : pct(l.bri);
-const allLightsOff = () => {
-  (S.hue.rooms || []).filter(r => r.anyOn).forEach(r => api(`hue/room/${r.id}`, { on: false }));
-  (S.ikea.lights || []).filter(l => l.on && l.reachable).forEach(l => api('ikea/light/' + l.id, { on: false }));
-};
+const allLightsOff = () => api('lights/all', { on: false }); // alle Hue- und IKEA-Lampen
 const sceneByName = (d, ...names) => (d.hue.scenes || []).find(s => names.some(n => s.name.toLowerCase() === n.toLowerCase()))
   || (d.hue.scenes || []).find(s => names.some(n => s.name.toLowerCase().includes(n.toLowerCase())));
 // alle Geräte einheitlich (Villa-Liste, Violett-Tabelle, Terminal-Status)
@@ -385,7 +382,7 @@ const tOut = (text, type = 'out') => { term.log.push({ type, text }); if (term.l
 const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 const findByName = (list, q, key = 'name') => { const n = norm(q); return list.find(x => norm(x[key]) === n) || list.find(x => norm(x[key]).startsWith(n)) || list.find(x => norm(x[key]).includes(n)); };
 const pad = (s, n) => String(s).slice(0, n).padEnd(n);
-const TERM_CMDS = ['hilfe', 'status', 'licht an', 'licht aus', 'licht 50', 'szenen', 'szene ', 'rollo alle hoch', 'rollo alle runter', 'rollo 1 50', 'sauger start', 'sauger station', 'sauger räume', 'sauger raum ', 'musik play', 'musik pause', 'musik weiter', 'musik geräte', 'musik gerät ', 'musik 40', 'tv aus', 'kalender', 'wetter', 'routinen', 'routine ', 'layouts', 'layout ', 'clear'];
+const TERM_CMDS = ['hilfe', 'status', 'licht an', 'licht aus', 'licht 50', 'alle an', 'alle aus', 'alle 50', 'szenen', 'szene ', 'rollo alle hoch', 'rollo alle runter', 'rollo 1 50', 'sauger start', 'sauger station', 'sauger räume', 'sauger raum ', 'musik play', 'musik pause', 'musik weiter', 'musik geräte', 'musik gerät ', 'musik 40', 'tv aus', 'kalender', 'wetter', 'routinen', 'routine ', 'layouts', 'layout ', 'clear'];
 function termStatus(d) {
   const lines = ['GERÄT                 STATUS        WERT', '────────────────────  ────────────  ─────────────────'];
   for (const x of deviceList(d)) lines.push(`${pad(x.name, 20)}  ${pad(!x.reach ? 'offline' : x.on ? 'AKTIV' : 'aus', 12)}  ${x.value}${x.extra ? ' · ' + x.extra : ''}`);
@@ -399,7 +396,7 @@ function termRun(line) {
   const err = (t) => tOut(t, 'err');
   switch (c) {
     case 'hilfe': case 'help': case '?':
-      tOut(['Befehle:', '  status                      alle Geräte', '  licht an|aus|0-100          Raum ' + (d.room?.name || ''), '  licht <lampe> an|aus|0-100  einzelne Lampe', '  szenen · szene <name>       Hue-Szenen', '  rollo [1-3|alle] hoch|runter|stopp|0-100   (0 = offen)', '  sauger start|pause|weiter|stopp|station|finden', '  sauger räume · sauger raum <name>[, <name>]', '  musik play|pause|weiter|zurück|lauter|leiser|0-100', '  musik geräte · musik gerät <name>', '  tv aus · tv <aktivität>', '  kalender [heute|morgen|woche|10] · wetter', '  routinen · routine <name>', '  layouts · layout <name> · clear', 'Tipp: Tab ergänzt, ↑/↓ blättert im Verlauf.'].join('\n')); break;
+      tOut(['Befehle:', '  status                      alle Geräte', '  licht an|aus|0-100          Raum ' + (d.room?.name || ''), '  licht <lampe> an|aus|0-100  einzelne Lampe', '  alle an|aus|1-100           alle Lampen auf einmal', '  szenen · szene <name>       Hue-Szenen', '  rollo [1-3|alle] hoch|runter|stopp|0-100   (0 = offen)', '  sauger start|pause|weiter|stopp|station|finden', '  sauger räume · sauger raum <name>[, <name>]', '  musik play|pause|weiter|zurück|lauter|leiser|0-100', '  musik geräte · musik gerät <name>', '  tv aus · tv <aktivität>', '  kalender [heute|morgen|woche|10] · wetter', '  routinen · routine <name>', '  layouts · layout <name> · clear', 'Tipp: Tab ergänzt, ↑/↓ blättert im Verlauf.'].join('\n')); break;
     case 'status': tOut(termStatus(d)); break;
     case 'clear': case 'cls': term.log = []; break;
     case 'licht': {
@@ -418,6 +415,14 @@ function termRun(line) {
         else api(base + l.id, val === 0 ? { on: false } : { bri: Math.max(1, Math.round(val / 100 * max)) });
         tOut(`${l.name}: ${val != null ? val + ' %' : last === 'aus' ? 'aus' : 'an'}`);
       }
+      break;
+    }
+    case 'alle': {
+      const n = num(a0);
+      if (a0 === 'an' || a0 === 'ein') { api('lights/all', { on: true }); tOut('Alle Lampen: an'); }
+      else if (a0 === 'aus') { api('lights/all', { on: false }); tOut('Alle Lampen: aus'); }
+      else if (n != null && n > 0) { api('lights/all', { pct: n }); tOut(`Alle Lampen: ${n} %`); }
+      else err('Beispiel: alle an, alle aus, alle 40');
       break;
     }
     case 'szenen': tOut((d.hue.scenes || []).map(s => '  ' + s.name).join('\n') || 'Keine Szenen.'); break;

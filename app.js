@@ -476,7 +476,7 @@ function renderHome(d) {
 
 // ---------- Detailansichten ----------
 function renderLicht(d) {
-  let h = `<div class="view-head"><h2>Licht</h2><span class="muted">${d.onLights.length} von ${d.allLights.length} an</span></div>`;
+  let h = `<div class="view-head"><h2>Licht</h2><span class="muted">${d.onLights.length} von ${d.allLights.length} an</span></div>${allLightsCard(d)}`;
   for (const room of d.rooms) {
     const ls = room.lights.map(id => d.hue.lights[id]).filter(Boolean);
     const scenes = (d.hue.scenes || []).filter(s => s.group === room.id);
@@ -509,17 +509,48 @@ function renderRollos(d) {
     <div class="muted" style="display:flex;justify-content:space-between"><span>offen</span><span>geschlossen</span></div>
   </div>`).join('') || '<p class="muted">Keine Rollos gefunden.</p>'}</div>`;
 }
+// Farbvorschau je Szene (Hue v1 liefert die Farben einer Szene nicht mit → nach Namen; dark = dunkle Schrift)
+const SCENE_LOOK = {
+  'kino': ['#0a1640', '#5a3a10'], 'abendessen': ['#ff9f4f', '#ffd9a0', 1], 'romantisch': ['#c2185b', '#ff7a7a'],
+  'party': ['#ff2fb2', '#2f6bff', '#36e27a'], 'polarlicht': ['#1fd1b9', '#36e27a', '#7b4dff'], 'gemütlich': ['#e9782a', '#ffc77a'],
+  'frühstück': ['#fff1d6', '#ffe2a8', 1], 'meditation': ['#5a2db8', '#1f3fa8'], 'entspannen': ['#ffa45c', '#ffd28a', 1],
+  'lesen': ['#fff0cf', '#ffe0a6', 1], 'konzentration': ['#e6f0ff', '#fff8e6', 1], 'aktivieren': ['#cfe2ff', '#ffffff', 1],
+  'hell': ['#fff7e0', '#ffffff', 1], 'gedimmt': ['#b36b2a', '#6b3a14'], 'nachtlicht': ['#7a1d0c', '#2a0a05'],
+  'dunkel': ['#2a2018', '#120d0a'], 'stehlampe': ['#ffbe73', '#8a4a1a'], 'sonnenuntergang savanne': ['#ff7a2f', '#ffbf4a', '#c2185b']
+};
+function sceneStyle(name) {
+  const l = SCENE_LOOK[name.toLowerCase()] || ['#f5953a', '#8d7cf8'];
+  const cols = l.filter(x => typeof x === 'string'), dark = l.includes(1);
+  return { bg: `linear-gradient(135deg, ${cols.join(', ')})`, dark };
+}
+// Alle Lampen (Hue + IKEA) auf einmal: an/aus, dimmen
+function allLightsCard(d) {
+  const lights = d.allLights.filter(l => l.reachable !== false);
+  const dim = d.onLights.filter(l => l.bri != null);
+  const avg = dim.length ? Math.round(dim.reduce((a, l) => a + (typeof l.id === 'number' ? l.bri : pct(l.bri)), 0) / dim.length) : 0;
+  return `<div class="card row-card all-lights ${d.onLights.length ? 'on' : ''}" style="margin-bottom:14px">
+    <div class="row-top"><div><div class="nm">Alle Lampen</div><div class="sub">${d.onLights.length} von ${lights.length} an${avg ? ` · Ø ${avg} %` : ''}</div></div>
+      <div class="chips" style="margin:0"><button class="chip ${d.onLights.length === lights.length && lights.length ? 'active' : ''}" data-alllights="on">Alle an</button><button class="chip ${d.onLights.length ? '' : 'active'}" data-alllights="off">Alle aus</button></div></div>
+    <input type="range" min="1" max="100" value="${avg || 50}" data-action="lights/all" aria-label="Alle Lampen dimmen">
+    <div class="chips">${[10, 25, 50, 75, 100].map(p => `<button class="chip" data-allpct="${p}">${p} %</button>`).join('')}</div>
+  </div>`;
+}
 function renderSzenen(d) {
   const acts = d.har.activities || [];
-  return `<div class="view-head"><h2>Szenen</h2></div>
+  const sceneGrid = (r) => `<div class="scene-grid">${(d.hue.scenes || []).filter(s => s.group === r.id).map(s => {
+    const st = sceneStyle(s.name);
+    return `<button class="scene-card ${st.dark ? 'dark' : ''}" data-scene="${esc(s.id)}" style="background:${st.bg}">${I.play}<span>${esc(s.name)}</span></button>`;
+  }).join('')}</div>`;
+  return `<div class="view-head"><h2>Szenen</h2><span class="muted">${(d.hue.scenes || []).length} Hue-Szenen</span></div>
+  ${allLightsCard(d)}
   <div class="card row-card" style="margin-bottom:14px">
     <div class="row-top"><div><div class="sub">Harmony – läuft gerade</div><div class="nm" style="font-size:20px">${esc(d.actLabel)}</div></div>
       <button class="chip danger" data-harmony-off ${d.actOn && d.har.ok ? '' : 'disabled'}>Alles aus</button></div>
     ${acts.length ? `<div class="chips">${acts.map(a => `<button class="chip ${a.id === d.actId ? 'active' : ''}" data-activity="${esc(a.id)}" ${d.har.ok ? '' : 'disabled'}>${esc(a.label)}</button>`).join('')}</div>` : ''}
     <div class="muted">${d.har.ok ? 'Neue Szenen erscheinen hier automatisch, sobald sie einmal über die Fernbedienung gestartet wurden.' : 'Harmony Hub nicht erreichbar.'}</div>
   </div>
-  ${d.rooms.map(r => `<div class="card row-card" style="margin-bottom:14px"><div class="sub">Hue – ${esc(r.name)}</div>
-    <div class="chips">${(d.hue.scenes || []).filter(s => s.group === r.id).map(s => `<button class="chip" data-scene="${esc(s.id)}">${esc(s.name)}</button>`).join('')}</div></div>`).join('')}`;
+  ${d.rooms.map(r => `<div class="card row-card" style="margin-bottom:14px"><div class="row-top"><div><div class="nm">Lichtszenen ${esc(r.name)}</div><div class="sub">Antippen zum Aktivieren · auch in der Hue-App und bei Alexa</div></div></div>
+    ${sceneGrid(r)}</div>`).join('')}`;
 }
 
 // ---------- Rendern ----------
@@ -582,7 +613,7 @@ document.addEventListener('change', (e) => {
   if (el.type === 'range') {
     busy = false;
     const n = Number(el.value);
-    api(a, a.startsWith('ikea/blind') ? { position: n } : a === 'spotify/volume' ? { volume: n } : { bri: n });
+    api(a, a.startsWith('ikea/blind') ? { position: n } : a === 'spotify/volume' ? { volume: n } : a === 'lights/all' ? { pct: n } : { bri: n });
   }
 });
 // Regler mit Füllfarbe (Layouts): Füllstand beim Ziehen mitführen
@@ -609,7 +640,9 @@ document.addEventListener('click', (e) => {
   }
   const b = e.target.closest('button'); if (!b || !S) return;
   const d = derive();
-  if (b.dataset.layout) { setLayout(b.dataset.layout); render(); }
+  if (b.dataset.alllights) { api('lights/all', { on: b.dataset.alllights === 'on' }); toast(b.dataset.alllights === 'on' ? 'Alle Lampen an' : 'Alle Lampen aus'); }
+  else if (b.dataset.allpct) { api('lights/all', { pct: Number(b.dataset.allpct) }); toast(`Alle Lampen ${b.dataset.allpct} %`); }
+  else if (b.dataset.layout) { setLayout(b.dataset.layout); render(); }
   else if (b.dataset.sp) api('spotify/cmd/' + b.dataset.sp);
   else if (b.dataset.spdev) { api('spotify/device', { id: b.dataset.spdev }); toast('Wechsle das Gerät …'); }
   else if (b.dataset.lampnav) { lampIdx += Number(b.dataset.lampnav); render(); }
