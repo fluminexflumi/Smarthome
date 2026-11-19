@@ -46,7 +46,9 @@ async function api(path, body = {}) {
     if (!j.ok) throw new Error(j.error || 'Fehler');
   } catch (e) { toast('Hat nicht geklappt: ' + e.message); }
 }
-function onState(data) { S = JSON.parse(data); if (!busy) render(); }
+// holdRender (layouts2.js): z. B. während im Terminal getippt wird nicht neu zeichnen
+const held = () => typeof holdRender === 'function' && holdRender();
+function onState(data) { S = JSON.parse(data); if (!busy && !held()) render(); }
 function setLive(v) { if (live !== v) { live = v; if (S) render(); } }
 function connect() {
   if (!SH.remote) {
@@ -159,6 +161,12 @@ function vacMap(v) {
     <div class="vmap-legend"><span><i class="sw sel"></i>ausgewählt</span><span><i class="sw st"></i>Station${docked ? ' · Roboter ist hier' : busy ? ' · Roboter unterwegs' : ''}</span></div>
   </div>`;
 }
+// 3D-Grundriss (isoMap aus layouts2.js) für die Sauger-Ansicht, Farben je Layout über --iso-* in layouts2.css
+function vacIso(d) {
+  const v = d.vac, docked = v.ok && (VAC_DOCKED.has(v.status) || v.charging === 1);
+  return `<div class="vac-iso">${isoMap(d)}
+    <div class="vmap-legend"><span><i class="sw sel"></i>ausgewählt</span><span><i class="sw lit"></i>Licht an</span><span><i class="sw st"></i>Station${docked ? ' · Roboter ist hier' : vacOn(v) ? ' · Roboter unterwegs' : ''}</span></div></div>`;
+}
 const vacText = (v) => !v.configured ? 'Nicht eingerichtet' : !v.ok ? 'Nicht erreichbar' : v.faults?.length ? 'Störung' : (VAC_STATUS[v.status] || `Status ${v.status}`);
 const vacOn = (v) => v.ok && (VAC_CLEANING.has(v.status) || v.status === 6);
 
@@ -212,7 +220,7 @@ function renderSauger(d) {
   </div>
   <div class="card row-card" style="margin-bottom:14px">
     <div class="row-top"><div><div class="nm">Räume reinigen</div><div class="sub">Räume im Plan oder unten antippen, dann starten. Es gelten die Einstellungen unten.</div></div></div>
-    ${vacMap(v)}
+    ${typeof isoMap === 'function' ? vacIso(d) : vacMap(v)}
     <div class="chips">${v.rooms.map(r => `<button class="chip ${vacSel.has(r.id) ? 'vsel' : ''}" aria-pressed="${vacSel.has(r.id)}" data-vacroom="${r.id}" ${dis}>${esc(r.name)}</button>`).join('') || '<span class="muted">Noch keine Räume bekannt.</span>'}</div>
     <div class="chips"><button class="chip accent" data-vacrooms ${vacSel.size && v.ok ? '' : 'disabled'}>${I.play.replace('<svg', '<svg width="14" height="14" style="display:inline;vertical-align:-2px;margin-right:6px"')}${vacSel.size ? `${vacSel.size} ${vacSel.size === 1 ? 'Raum' : 'Räume'} reinigen` : 'Raum wählen'}</button>
       ${vacSel.size ? '<button class="chip" data-vacclear>Auswahl löschen</button>' : ''}</div>
@@ -515,6 +523,7 @@ function render() {
   const v = { home, licht: renderLicht, rollos: renderRollos, sauger: renderSauger, szenen: renderSzenen, musik: renderMusik, layouts: renderLayouts }[view] || home;
   $('#view').innerHTML = v(d);
   bindVSlider(d);
+  if (typeof afterRender === 'function') afterRender(d);
 }
 
 // ---------- Vertikaler Regler ----------
@@ -558,6 +567,9 @@ document.addEventListener('change', (e) => {
     if (k === 'music') api('spotify/cmd/' + (d.sp.playing ? 'pause' : 'play'));
     return;
   }
+  // Schalter aus den Geräte-Listen (layouts2.js): Rollo auf/zu, Saugroboter start/Station
+  if (a.startsWith('blindtoggle/')) { api('ikea/blind/' + a.slice(12), { position: el.checked ? 0 : 100 }); return; }
+  if (a === 'vac/toggle') { api('vacuum/cmd/' + (el.checked ? 'start' : 'dock')); return; }
   if (el.type === 'checkbox') api(a, { on: el.checked });
   if (el.type === 'range') {
     busy = false;
@@ -600,7 +612,8 @@ document.addEventListener('click', (e) => {
   else if (b.dataset.dial && d.room) {
     const base = dialTarget ?? (d.room.anyOn ? d.roomPct : 0);
     dialTarget = Math.max(0, Math.min(100, base + Number(b.dataset.dial)));
-    $('.dial-val').innerHTML = `${dialTarget}<small> %</small>`;
+    const dv = $('.dial-val'); if (dv) dv.innerHTML = `${dialTarget}<small> %</small>`; // nur im Standard-Layout vorhanden
+    toast(`Helligkeit ${dialTarget} %`);
     clearTimeout(dialTimer);
     dialTimer = setTimeout(() => { api(`hue/room/${d.room.id}`, dialTarget === 0 ? { on: false } : { bri: toBri(dialTarget) }); dialTarget = null; }, 350);
   }
@@ -628,7 +641,7 @@ document.addEventListener('click', (e) => {
     api('vacuum/rooms', { ids: [...vacSel] }); toast('Reinige ' + names.join(', ') + ' …'); vacSel.clear(); render();
   }
 });
-setInterval(() => { if (!busy && view === 'home') render(); }, 30000); // Uhrzeit aktualisieren
+setInterval(() => { if (!busy && !held() && view === 'home') render(); }, 30000); // Uhrzeit aktualisieren
 // Fernmodus: Klick auf den Benutzer meldet ab
 if (SH.remote) {
   const u = $('.user'); u.title = 'Abmelden'; u.style.cursor = 'pointer';
