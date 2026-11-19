@@ -295,6 +295,7 @@ function renderHomeIso(d) {
       <div class="iso-legend">${liveBadge()}<span class="glass"><i class="iso-sw lit"></i>Licht an</span><span class="glass"><i class="iso-sw sel"></i>zum Reinigen gewählt</span></div>
       <div class="iso-quick">${(d.hue.scenes || []).filter(s => s.group === d.room?.id).slice(0, 3).map(s => `<button class="glass" data-scene="${esc(s.id)}">${I.spark}${esc(s.name)}</button>`).join('')}</div>
     </section>
+    ${calendarCard('wide', 4)}
   </div>`;
 }
 
@@ -336,6 +337,7 @@ function renderHomeNeo(d) {
     <section class="card n-list"><div class="card-head"><h3>Lampen</h3></div>
       ${lights.map(l => `<div class="n-row"><span class="n-ic sm">${I.bulb}</span><div><b>${esc(l.name)}</b><small>${l.reachable === false ? 'offline' : l.on ? lightPct(l) + ' %' : 'aus'}</small></div>${sw(l.on && l.reachable !== false, typeof l.id === 'number' ? `ikea/light/${l.id}` : `hue/light/${l.id}`, 'neo', l.reachable === false, l.name)}</div>`).join('')}</section>
     ${musicCard(d, 'n-music')}
+    ${calendarCard('wide', 4)}
   </div>`;
 }
 
@@ -494,6 +496,7 @@ function renderHomeTerminal(d) {
       <label class="term-in"><span class="t-ps">toni@smarthome:~$</span><input id="term-in" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Befehl eingeben" value="${esc(term.draft)}"></label>
       <div class="term-sugg">${['status', 'licht an', 'licht aus', 'rollo alle hoch', 'rollo alle runter', 'sauger start', 'musik pause', 'kalender', 'wetter', 'hilfe'].map(s => `<button class="t-sugg" data-term="${esc(s)}">${esc(s)}</button>`).join('')}</div>
     </section>
+    ${calendarCard('wide term-cal', 4)}
   </div>`;
 }
 function termAfter() {
@@ -595,6 +598,7 @@ function renderHomeBauhaus(d) {
     ${d.vac.configured ? `<div class="bh bh-vac ${vacOn(d.vac) ? 'on' : ''}"><span class="bh-k">Sauger</span><span class="bh-v sm">${esc(vacText(d.vac))} · ${d.vac.ok ? d.vac.battery + ' %' : '–'}</span>
       <div class="bh-pair"><button data-vac="${vacOn(d.vac) ? 'pause' : 'start'}" ${d.vac.ok ? '' : 'disabled'}>${vacOn(d.vac) ? '❚❚' : '▶'}</button><button data-vac="dock" ${d.vac.ok ? '' : 'disabled'} aria-label="Zur Station">⌂</button></div></div>` : ''}
     <button class="bh bh-night" data-routine="nacht"><span class="bh-shape moon"></span><span class="bh-k">Gute Nacht</span><span class="bh-v sm">alles aus, Rollos zu</span></button>
+    <div class="bh bh-cal"><span class="bh-k">Termine</span><div class="cal-list">${calendarBody(4, 30)}</div>${calToggle('bh-more')}</div>
   </div>`;
 }
 // Bildschirmschoner: nach 90 s ohne Berührung (nur Bauhaus, Startseite)
@@ -614,10 +618,76 @@ setInterval(() => {
   s.hidden = false;
 }, 5000);
 
+// =====================================================================
+// Menüpunkt „Kalender“: Monatsansicht + Terminliste (für alle Layouts)
+// =====================================================================
+let kalMonth = (() => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), 1); })();
+let kalDay = null; // 'JJJJ-MM-TT' oder null = alle kommenden
+const dayKey = (t) => { const x = new Date(t); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+// Termin über mehrere Tage (z. B. ganztags 2 Tage) an jedem Tag zählen
+function eventsByDay() {
+  const map = new Map();
+  for (const e of S.calendar?.events || []) {
+    const last = e.allDay ? e.end - 1 : Math.max(e.start, e.end - 1);
+    for (let t = startOfDay(e.start); t <= last; t += DAYMS) {
+      const k = dayKey(t + 3600000); // +1 h gegen Sommerzeit-Sprung
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(e);
+    }
+  }
+  return map;
+}
+function renderKalender() {
+  const c = S.calendar;
+  const head = `<div class="view-head"><h2>Kalender</h2><span class="muted">${esc(c?.name || 'Google-Kalender')}${c?.updated ? ' · aktualisiert ' + hhmm(c.updated) : ''}</span></div>`;
+  if (!c?.configured) return head + `<div class="card row-card">${calendarBody()}</div>`;
+  const byDay = eventsByDay(), today = dayKey(Date.now());
+  const y = kalMonth.getFullYear(), m = kalMonth.getMonth();
+  const first = new Date(y, m, 1), offset = (first.getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < offset; i++) cells.push('<span class="kal-cell empty"></span>');
+  for (let dd = 1; dd <= days; dd++) {
+    const k = `${y}-${String(m + 1).padStart(2, '0')}-${String(dd).padStart(2, '0')}`, n = byDay.get(k)?.length || 0;
+    const past = k < today;
+    cells.push(`<button class="kal-cell ${k === today ? 'today' : ''} ${k === kalDay ? 'sel' : ''} ${n ? 'has' : ''} ${past ? 'past' : ''}" data-kalday="${k}" aria-label="${dd}. ${n ? n + ' Termine' : 'keine Termine'}" aria-pressed="${k === kalDay}">
+      <span>${dd}</span>${n ? `<i>${'<b></b>'.repeat(Math.min(n, 3))}</i>` : ''}</button>`);
+  }
+  const monthName = first.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' });
+  const maxMs = Date.now() + 120 * DAYMS;
+  // Liste: gewählter Tag oder alle kommenden (gruppiert)
+  let list;
+  if (kalDay) {
+    const ev = byDay.get(kalDay) || [];
+    const label = dayLabel(new Date(kalDay + 'T12:00').getTime());
+    list = `<div class="kal-list-head"><h3>${esc(label)}</h3><button class="chip-tag outline btn" data-kalday="">Alle kommenden</button></div>`
+      + (ev.length ? ev.map(e => `<div class="cal-ev ${e.allDay ? 'all' : ''}"><span class="cal-t">${esc(evTime(e))}</span><span class="cal-x"><b>${esc(e.title)}</b>${e.location ? `<small>${esc(e.location)}</small>` : ''}</span></div>`).join('')
+        : `<p class="muted">${new Date(kalDay).getTime() > maxMs ? 'So weit voraus lädt das Dashboard keine Termine (120 Tage).' : 'Keine Termine an diesem Tag.'}</p>`);
+  } else {
+    const ev = upcoming(400);
+    let last = '';
+    list = `<div class="kal-list-head"><h3>Kommende Termine</h3><span class="muted">${ev.length} in 120 Tagen</span></div>` + (ev.length ? ev.map(e => {
+      const dl = dayLabel(Math.max(e.start, Date.now()));
+      const h = dl !== last ? `<div class="cal-day">${esc(dl)}</div>` : ''; last = dl;
+      return h + `<div class="cal-ev ${e.allDay ? 'all' : ''} ${e.start <= Date.now() && e.end > Date.now() ? 'now' : ''}"><span class="cal-t">${esc(evTime(e))}</span><span class="cal-x"><b>${esc(e.title)}</b>${e.location ? `<small>${esc(e.location)}</small>` : ''}</span></div>`;
+    }).join('') : '<p class="muted">Keine Termine in den nächsten 120 Tagen.</p>');
+  }
+  return head + `<div class="kal">
+    <section class="card kal-month">
+      <div class="kal-nav"><button class="round" data-kalmonth="-1" aria-label="Vorheriger Monat">${I.chevL}</button><h3>${esc(monthName)}</h3><button class="round" data-kalmonth="1" aria-label="Nächster Monat">${I.chevR}</button></div>
+      <div class="kal-grid">${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(w => `<span class="kal-wd">${w}</span>`).join('')}${cells.join('')}</div>
+      <div class="kal-foot"><button class="chip" data-kaltoday>Heute</button>${c.ok ? '' : `<span class="chip-tag warn">${esc(c.error || 'nicht erreichbar')}</span>`}</div>
+    </section>
+    <section class="card kal-list">${list}</section>
+  </div>`;
+}
+
 // ---------- Bedienung der neuen Layouts ----------
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b || !S) return;
-  if ('calmore' in b.dataset) { calOpen = !calOpen; try { localStorage.setItem('sh.calopen', calOpen ? '1' : '0'); } catch {} render(); }
+  if (b.dataset.kalmonth) { kalMonth = new Date(kalMonth.getFullYear(), kalMonth.getMonth() + Number(b.dataset.kalmonth), 1); render(); }
+  else if ('kalday' in b.dataset) { kalDay = b.dataset.kalday || null; if (kalDay) { const x = new Date(kalDay + 'T12:00'); kalMonth = new Date(x.getFullYear(), x.getMonth(), 1); } render(); }
+  else if ('kaltoday' in b.dataset) { const t = new Date(); kalMonth = new Date(t.getFullYear(), t.getMonth(), 1); kalDay = dayKey(Date.now()); render(); }
+  else if ('calmore' in b.dataset) { calOpen = !calOpen; try { localStorage.setItem('sh.calopen', calOpen ? '1' : '0'); } catch {} render(); }
   else if (b.dataset.isotab) { isoTab = b.dataset.isotab; render(); }
   else if (b.dataset.iso === 'lightsoff') { allLightsOff(); toast('Alle Lichter aus'); }
   else if (b.dataset.routine) runRoutine(b.dataset.routine);

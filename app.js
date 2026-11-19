@@ -324,7 +324,14 @@ function dialCard(d) {
   </section>`;
 }
 
+// Raumansicht: Tonis Foto (public/wohnzimmer.jpg), wird überall verwendet, wo früher die Zeichnung war.
+// Helligkeit des Fotos folgt dem Licht im Raum, bei laufendem TV leuchtet der Fernseher blau.
 function roomSvg(d) {
+  const on = !!d.room?.anyOn, l = on ? Math.max(.35, d.roomPct / 100) : 0;
+  return `<div class="room-photo ${on ? 'on' : ''}" style="--l:${l.toFixed(2)}" aria-hidden="true"><img src="wohnzimmer.jpg" alt="" decoding="async">${d.actOn ? '<i class="rp-tv"></i>' : ''}</div>`;
+}
+// frühere gezeichnete Raumansicht (rote/grüne Kissen), nicht mehr verwendet
+function roomDrawing(d) {
   const h = new Date().getHours(), day = h >= 7 && h < 18;
   const light = d.room?.anyOn ? Math.max(.25, d.roomPct / 100) : 0;
   const tvOn = d.actOn;
@@ -463,7 +470,8 @@ function chartCard(d) {
 }
 
 function renderHome(d) {
-  return `<div class="home">${greetCard(d)}${heroCard(d)}${blindsCard(d)}${dialCard(d)}${tilesCard(d)}${chartCard(d)}${vacCard(d)}</div>`;
+  const cal = typeof calendarCard === 'function' ? calendarCard('wide', 4) : ''; // layouts2.js
+  return `<div class="home">${greetCard(d)}${heroCard(d)}${blindsCard(d)}${dialCard(d)}${tilesCard(d)}${chartCard(d)}${vacCard(d)}${cal}</div>`;
 }
 
 // ---------- Detailansichten ----------
@@ -520,7 +528,7 @@ function render() {
   const d = derive();
   renderFrame(d);
   const home = HOMES[layout] || renderHome; // Startseite je nach gewähltem Layout (layouts.js)
-  const v = { home, licht: renderLicht, rollos: renderRollos, sauger: renderSauger, szenen: renderSzenen, musik: renderMusik, layouts: renderLayouts }[view] || home;
+  const v = { home, licht: renderLicht, rollos: renderRollos, sauger: renderSauger, szenen: renderSzenen, musik: renderMusik, kalender: renderKalender, layouts: renderLayouts }[view] || home;
   $('#view').innerHTML = v(d);
   bindVSlider(d);
   if (typeof afterRender === 'function') afterRender(d);

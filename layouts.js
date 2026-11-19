@@ -26,6 +26,8 @@ Object.assign(I, {
   computer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>',
   volume: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>',
   cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="7"/></svg>',
+  sliders: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+  bulbBig: '<svg viewBox="0 0 64 64" aria-hidden="true"><path class="bb-glass" d="M32 6a20 20 0 0 0-12 36c2.4 1.9 4 4.4 4 7.3V51h16v-1.7c0-2.9 1.6-5.4 4-7.3A20 20 0 0 0 32 6z"/><path class="bb-fil" d="M26 34l3-6 3 6 3-6 3 6" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><rect class="bb-base" x="24" y="52" width="16" height="4" rx="2"/><rect class="bb-base" x="26" y="57.5" width="12" height="3.5" rx="1.75"/></svg>',
   drop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/></svg>',
   wind: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/></svg>',
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
@@ -172,8 +174,8 @@ function renderHomeGlas(d) {
     <div class="g-panel">
       <section class="card g-room">${roomSvg(d)}${liveBadge('g-live')}<div class="g-cap"><b>Raumansicht</b><span>${esc(r?.name || '')}</span></div></section>
       <section class="card g-power ${on ? 'on' : ''}">
-        <div class="g-head"><div><h3>Licht</h3><div class="sub">${esc(r?.name || '')}</div></div><button class="g-ic btn" data-goto="licht" aria-label="Alle Lampen">${I.cog}</button></div>
-        <button class="g-disc" data-room-toggle aria-label="Licht ${on ? 'aus' : 'ein'}schalten" style="--g:${(v / 100).toFixed(2)}"><span class="g-disc-in">${I.power}</span></button>
+        <div class="g-head"><div><h3>Licht</h3><div class="sub">${esc(r?.name || '')}</div></div><button class="g-ic btn" data-goto="licht" aria-label="Alle Lampen einzeln">${I.sliders}</button></div>
+        <button class="g-lamp ${on ? 'on' : ''}" data-room-toggle aria-label="Licht ${on ? 'aus' : 'ein'}schalten" aria-pressed="${on}" style="--p:${v}"><span class="g-lamp-core">${I.bulbBig}</span></button>
         <div class="g-val"><b>${on ? v + ' %' : 'Aus'}</b><span>${on ? `${d.roomLights.filter(l => l.on).length} von ${d.roomLights.length} Lampen an` : 'Antippen zum Einschalten'}</span></div>
       </section>
       <section class="card g-scene">
@@ -184,6 +186,7 @@ function renderHomeGlas(d) {
       <section class="card g-bright"><span class="g-ic">${I.sun}</span>${fillRange('g-range', 1, 254, on ? (r?.bri ?? 254) : 1, `hue/room/${r?.id}`, 'Helligkeit', !r)}<b>${v} %</b></section>
       ${musicCard(d, 'g-music')}
       ${vacCard(d)}
+      ${calendarCard('wide', 4)}
     </div>
   </div>`;
 }
@@ -276,6 +279,7 @@ function renderHomeGold(d) {
       </div></section>` : ''}
     ${blindsCard(d)}
     ${musicCard(d, 'o-music')}
+    ${calendarCard('wide', 4)}
   </div>`;
 }
 
@@ -366,6 +370,7 @@ function renderHomePanorama(d) {
     ${chartCard(d)}
     ${musicCard(d, 'p-music')}
     ${vacCard(d)}
+    ${calendarCard('wide', 4)}
   </div>`;
 }
 

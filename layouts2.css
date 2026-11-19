@@ -13,6 +13,19 @@
 .cal-x b { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .cal-x small { font-size: 12px; color: var(--muted); }
 .cal-card.open .cal-list { max-height: 560px; }
+/* breite Karte über die ganze Rasterbreite: Termine in Spalten, damit sie nicht zu lang wird */
+.cal-card.wide { grid-column: 1 / -1; }
+.cal-card.wide .cal-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px 10px; align-items: start; max-height: none; }
+.cal-card.wide .cal-day { grid-column: 1 / -1; }
+.term-cal { margin-top: 18px; }
+/* Bauhaus: eigene Termin-Kachel */
+.bh-cal { grid-area: cal; justify-content: flex-start; gap: 10px; background: var(--bh-white); box-shadow: inset 0 0 0 6px var(--bh-yellow); }
+.bh-cal .cal-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; max-height: none; }
+.bh-cal .cal-day { grid-column: 1 / -1; color: var(--bh-black); font-size: 13px; }
+.bh-cal .cal-ev { border-radius: 0; background: #f1ead9; border-left: 6px solid var(--bh-blue); }
+.bh-cal .cal-ev.all { border-left-color: var(--bh-red); }
+.bh-more { align-self: flex-start; border: 0; background: var(--bh-black); color: var(--bh-white); font: inherit; font-weight: 800; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; padding: 12px 16px; display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+.bh-more svg { width: 16px; height: 16px; }
 .cal-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line-2); background: rgba(255,255,255,.04); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
 .cal-more:hover { background: rgba(255,255,255,.1); }
 .cal-more svg, .m-more svg { width: 16px; height: 16px; transition: transform .2s; }
@@ -23,6 +36,30 @@
 .hist { display: block; width: 100%; height: 90px; margin-top: 10px; }
 .hist-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 .hist-empty { margin-top: 12px; font-size: 12.5px; }
+
+/* ---------- Menüpunkt Kalender ---------- */
+.kal { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 1.3fr); gap: 18px; align-items: start; }
+.kal-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.kal-nav h3 { text-transform: capitalize; font-size: 19px; }
+.kal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.kal-wd { text-align: center; font-size: 12px; color: var(--muted); font-weight: 600; padding-bottom: 4px; }
+.kal-cell { position: relative; aspect-ratio: 1; min-height: 40px; border-radius: 12px; border: 1px solid transparent; background: rgba(255,255,255,.04); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0; }
+.kal-cell.empty { background: none; cursor: default; }
+.kal-cell.past { opacity: .45; }
+.kal-cell.has { background: color-mix(in srgb, var(--iso-sel-edge, #4c8dff) 14%, transparent); font-weight: 700; }
+.kal-cell.today { border-color: var(--iso-sel-edge, #4c8dff); }
+.kal-cell.sel { background: var(--iso-sel-edge, #4c8dff); color: var(--accent-fg, #fff); opacity: 1; }
+body[data-layout="standard"] .kal-cell.sel { color: #04211e; }
+body[data-layout="gold"] .kal-cell.sel { color: #1c1606; }
+body[data-layout="villa"] .kal-cell.sel { color: #0b1120; }
+body[data-layout="violett"] .kal-cell.sel { color: #1a1233; }
+.kal-cell i { display: flex; gap: 3px; }
+.kal-cell i b { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .8; }
+.kal-cell:hover:not(.empty) { border-color: var(--line-2); }
+.kal-foot { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+.kal-list { display: flex; flex-direction: column; gap: 6px; }
+.kal-list-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
+.kal-list-head h3 { text-transform: capitalize; }
 
 /* =====================================================================
    Villa (Nachtblau)
@@ -420,7 +457,7 @@ body[data-layout="bauhaus"] .switch input:checked + .track { background: var(--b
 body[data-layout="bauhaus"] :is(.vac-card, .vac-hero, .dial-card, .tile.on, .greet, .hero) { background: var(--card); border-color: var(--line-2); color: var(--text); }
 @media (max-width: 860px) { body[data-layout="bauhaus"] .sidebar { background: rgba(251,247,238,.96); border-radius: 0; } }
 .bauhaus { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(190px, auto);
-  grid-template-areas: "light light dim clock" "blinds scene music clock" "vac vac night night"; gap: 10px; }
+  grid-template-areas: "light light dim clock" "blinds scene music clock" "vac vac night night" "cal cal cal cal"; gap: 10px; }
 .bh { position: relative; overflow: hidden; border: 0; padding: 22px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; text-align: left; color: var(--bh-black); background: var(--bh-white); font-family: inherit; cursor: default; min-width: 0; }
 button.bh { cursor: pointer; transition: filter .1s, transform .06s; }
 button.bh:active { transform: scale(.985); }
@@ -475,7 +512,17 @@ button.bh:active { transform: scale(.985); }
   .violett { grid-template-columns: minmax(0, 1fr); }
   .vi-side { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
   .morgen { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "routines" "agenda" "quick"; }
-  .bauhaus { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "clock clock dim" "light light dim" "blinds scene music" "vac night night"; }
+  .bauhaus { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "clock clock dim" "light light dim" "blinds scene music" "vac night night" "cal cal cal"; }
+}
+@media (max-width: 860px) {
+  .kal { grid-template-columns: minmax(0, 1fr); }
+}
+/* 8 Menüpunkte in der Tab-Leiste am Handy: etwas kleiner */
+@media (max-width: 480px) {
+  .sidebar { gap: 1px; left: 6px; right: 6px; padding: 5px 3px; }
+  .nav-item { font-size: 9.5px; padding: 8px 0; gap: 4px; min-width: 0; }
+  .nav-item svg { width: 20px; height: 20px; }
+  .nav-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 }
 @media (max-width: 640px) {
   .villa { grid-template-columns: minmax(0, 1fr); grid-template-areas: "hello" "stats" "house" "rooms" "gauge" "energy" "sec" "scenes" "cal" "music"; gap: 12px; }
@@ -499,7 +546,7 @@ button.bh:active { transform: scale(.985); }
   .m-routine { padding: 14px; } .m-routine ol { display: none; }
   .m-qrow { flex-wrap: wrap; }
   .m-range { flex-basis: 100%; order: 3; }
-  .bauhaus { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(150px, auto); grid-template-areas: "clock clock" "light light" "dim blinds" "scene music" "vac vac" "night night"; gap: 8px; }
+  .bauhaus { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(150px, auto); grid-template-areas: "clock clock" "light light" "dim blinds" "scene music" "vac vac" "night night" "cal cal"; gap: 8px; }
   .bh { padding: 16px; }
   .bh-shape.circle { width: 150px; height: 150px; }
 }
