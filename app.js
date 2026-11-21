@@ -553,11 +553,41 @@ function renderSzenen(d) {
     ${sceneGrid(r)}</div>`).join('')}`;
 }
 
+// ---------- Tokens (Claude-Tokenverbrauch der Worklog-Mod) ----------
+function renderTokens() {
+  return `<div class="card tokens-card">
+    <div class="row-top"><div><div class="nm" style="font-size:20px">Claude-Tokenverbrauch</div>
+      <div class="sub" id="tokens-info">Wird geladen …</div></div>
+      <button class="chip" id="tokens-reload" type="button">Neu laden</button></div>
+    <iframe id="tokens-frame" title="Claude-Tokenverbrauch"></iframe>
+  </div>`;
+}
+async function ladeTokens() {
+  const frame = $('#tokens-frame'), info = $('#tokens-info');
+  if (!frame) return;
+  info.textContent = 'Wird geladen …';
+  try {
+    const r = await fetch(SH.apiBase + '/api/tokens', { headers: await SH.authHeaders(), cache: 'no-store' });
+    const text = await r.text();
+    if (!r.ok) { info.textContent = text || 'Nicht verfügbar (' + r.status + ')'; frame.srcdoc = ''; return; }
+    frame.srcdoc = text;
+    info.textContent = 'Wird von Claude alle 15 Minuten aktualisiert, solange Claude läuft';
+  } catch (e) {
+    info.textContent = 'Nicht erreichbar: ' + e.message;
+  }
+}
+document.addEventListener('click', (e) => { if (e.target.closest('#tokens-reload')) ladeTokens(); });
+
 // ---------- Rendern ----------
 function render() {
   if (!S) return;
   const d = derive();
   renderFrame(d);
+  // Tokens: eingebettete Seite nur einmal laden, nicht bei jedem Live-Update neu zeichnen
+  if (view === 'tokens') {
+    if (!$('#tokens-frame')) { $('#view').innerHTML = renderTokens(); ladeTokens(); }
+    return;
+  }
   const home = HOMES[layout] || renderHome; // Startseite je nach gewähltem Layout (layouts.js)
   const v = { home, licht: renderLicht, rollos: renderRollos, sauger: renderSauger, szenen: renderSzenen, musik: renderMusik, kalender: renderKalender, layouts: renderLayouts }[view] || home;
   $('#view').innerHTML = v(d);
