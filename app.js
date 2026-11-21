@@ -10,6 +10,7 @@ try { view = localStorage.getItem('sh.view') || 'home'; } catch {}
 
 // ---------- Icons ----------
 const I = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>',
   blind: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 8h16M4 12h16"/><path d="M12 12v4"/></svg>',
   tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
@@ -557,23 +558,39 @@ function remoteCard(d) {
     ${nums.length ? `<div class="rk-nums">${nums.map(n => k(String(n), String(n))).join('')}</div>` : ''}
   </div>`;
 }
+// Schmale Zeile „Alle Lampen“ für die Szenen-Ansicht: Schalter + Regler (die grosse Karte bleibt in „Licht“)
+function allLightsRow(d) {
+  const dim = d.onLights.filter(l => l.bri != null);
+  const avg = dim.length ? Math.round(dim.reduce((a, l) => a + (typeof l.id === 'number' ? l.bri : pct(l.bri)), 0) / dim.length) : 0;
+  return `<div class="card all-row ${d.onLights.length ? 'on' : ''}">
+    <span class="nm">Alle Lampen</span>
+    <input type="range" min="1" max="100" value="${avg || 50}" data-action="lights/all" aria-label="Alle Lampen dimmen">
+    <span class="all-pct">${d.onLights.length ? (avg || 100) + ' %' : 'aus'}</span>
+    ${sw(d.onLights.length > 0, 'lights/all', 'orange', false, 'Alle Lampen an oder aus')}
+  </div>`;
+}
 function renderSzenen(d) {
   const acts = d.har.activities || [];
-  const sceneGrid = (r) => `<div class="scene-grid">${(d.hue.scenes || []).filter(s => s.group === r.id).map(s => {
-    const st = sceneStyle(s.name);
-    return `<button class="scene-card ${st.dark ? 'dark' : ''}" data-scene="${esc(s.id)}" style="background:${st.bg}">${I.play}<span>${esc(s.name)}</span></button>`;
-  }).join('')}</div>`;
+  const last = S.lastScene;
+  const sceneGrid = (r) => `<div class="scene-grid">${(d.hue.scenes || []).filter(s => s.group === r.id)
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+    .map(s => {
+      const st = sceneStyle(s.name), on = last?.id === s.id && r.anyOn;
+      return `<button class="scene-tile ${on ? 'on' : ''}" data-scene="${esc(s.id)}" ${on ? 'aria-current="true"' : ''}>
+        <span class="scene-dot" style="background:${st.bg}">${on ? I.check : ''}</span><span class="scene-nm">${esc(s.name)}</span></button>`;
+    }).join('')}</div>`;
+  const activeName = (r) => { const s = r.anyOn && last && (d.hue.scenes || []).find(x => x.id === last.id && x.group === r.id); return s ? ' · aktiv: ' + esc(s.name) : ''; };
   return `<div class="view-head"><h2>Szenen</h2><span class="muted">${(d.hue.scenes || []).length} Hue-Szenen</span></div>
-  ${allLightsCard(d)}
+  ${allLightsRow(d)}
+  ${d.rooms.map(r => `<div class="card row-card" style="margin-bottom:14px"><div class="row-top"><div><div class="nm">${esc(r.name)}</div><div class="sub">${(d.hue.scenes || []).filter(s => s.group === r.id).length} Szenen${activeName(r)}</div></div></div>
+    ${sceneGrid(r)}</div>`).join('')}
   <div class="card row-card" style="margin-bottom:14px">
     <div class="row-top"><div><div class="sub">Harmony – läuft gerade</div><div class="nm" style="font-size:20px">${esc(d.actLabel)}</div></div>
       <button class="chip danger" data-harmony-off ${d.actOn && d.har.ok ? '' : 'disabled'}>Alles aus</button></div>
     ${acts.length ? `<div class="chips">${acts.map(a => `<button class="chip ${a.id === d.actId ? 'active' : ''}" data-activity="${esc(a.id)}" ${d.har.ok ? '' : 'disabled'}>${esc(a.label)}</button>`).join('')}</div>` : ''}
     ${d.har.ok ? '' : '<div class="muted">Harmony Hub nicht erreichbar.</div>'}
   </div>
-  ${remoteCard(d)}
-  ${d.rooms.map(r => `<div class="card row-card" style="margin-bottom:14px"><div class="row-top"><div><div class="nm">Lichtszenen ${esc(r.name)}</div><div class="sub">Antippen zum Aktivieren · auch in der Hue-App und bei Alexa</div></div></div>
-    ${sceneGrid(r)}</div>`).join('')}`;
+  ${remoteCard(d)}`;
 }
 
 // ---------- Tokens (Claude-Tokenverbrauch der Worklog-Mod) ----------
