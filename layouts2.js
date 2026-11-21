@@ -67,7 +67,7 @@ function hints(d) {
 // ---------- Routinen (mehrere Befehle auf einen Tipp) ----------
 function routines(d) {
   const film = sceneByName(d, 'dunkel', 'Gedimmt', 'Entspannen'), morning = sceneByName(d, 'Aktivieren', 'Hell', 'Konzentration');
-  const act = d.har.activities?.[0];
+  const act = tvDefault(d);
   return [
     { id: 'morgen', name: 'Guten Morgen', icon: I.sun, color: '#f3b23c', steps: [
       ['Rollos hoch', () => blindsAll(0)],

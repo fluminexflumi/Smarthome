@@ -372,3 +372,28 @@ input[type=range] { width: 100%; height: 26px; margin: 0; accent-color: var(--or
 .tokens-card .row-top { margin-bottom: 12px; }
 #tokens-frame { display: block; width: 100%; height: calc(100vh - 210px); min-height: 520px; border: 0; border-radius: 18px; background: #020308; }
 @media (max-width: 900px) { #tokens-frame { height: calc(100vh - 230px); } }
+
+/* ---- Harmony-Fernbedienung (Szenen-Ansicht, nur wenn eine Aktivität läuft) ---- */
+.remote { display: grid; grid-template-columns: 64px 1fr 64px; gap: 14px; align-items: center; justify-items: center; margin: 10px 0 14px; }
+.rk { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; border: 1px solid var(--line-2); background: rgba(127,127,127,.12); color: inherit; font: inherit; font-size: 20px; font-weight: 700; cursor: pointer; transition: background .15s, transform .06s; touch-action: manipulation; user-select: none; }
+.rk:hover { background: rgba(127,127,127,.22); }
+.rk:active { transform: scale(.92); background: var(--purple); color: #fff; }
+.rk.none { visibility: hidden; cursor: default; }
+.rk.sm { width: 44px; height: 44px; font-size: 16px; }
+.rk.mini { font-size: 11px; letter-spacing: -.02em; }
+.rk.txt { width: auto; min-width: 72px; height: 42px; padding: 0 14px; border-radius: 21px; font-size: 14px; font-weight: 600; }
+.rk-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.rk-cap { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.rk-pad { display: grid; grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(3, 60px); grid-template-areas: ". u ." "l o r" ". d ."; gap: 6px; }
+.rk-pad .rk { width: 60px; height: 60px; }
+.rk-pad .p-up { grid-area: u; } .rk-pad .p-left { grid-area: l; } .rk-pad .p-right { grid-area: r; } .rk-pad .p-down { grid-area: d; }
+.rk-pad .p-ok { grid-area: o; background: var(--purple); color: #fff; border-color: transparent; font-size: 16px; }
+.rk-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 10px; }
+.rk-nums { display: grid; grid-template-columns: repeat(5, 48px); justify-content: center; gap: 8px; margin-top: 14px; }
+.rk-nums .rk { width: 48px; height: 48px; font-size: 17px; }
+@media (max-width: 420px) {
+  .remote { grid-template-columns: 52px 1fr 52px; gap: 8px; }
+  .rk { width: 48px; height: 48px; }
+  .rk-pad { grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); }
+  .rk-pad .rk { width: 52px; height: 52px; }
+}

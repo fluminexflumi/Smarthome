@@ -535,6 +535,28 @@ function allLightsCard(d) {
     <div class="chips">${[10, 25, 50, 75, 100].map(p => `<button class="chip" data-allpct="${p}">${p} %</button>`).join('')}</div>
   </div>`;
 }
+// Fernbedienung für die laufende Harmony-Aktivität. Der Server liefert in har.keys nur die Tasten, die die Aktivität kennt.
+function remoteCard(d) {
+  if (!d.actOn) return '';
+  const has = new Set(d.har.keys || []);
+  const k = (key, label, cls = '', title = '') => has.has(key)
+    ? `<button class="rk ${cls}" data-hkey="${key}" title="${esc(title || label)}" aria-label="${esc(title || label)}">${label}</button>`
+    : `<span class="rk ${cls} none" aria-hidden="true"></span>`;
+  const nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0].filter(n => has.has(String(n)));
+  return `<div class="card row-card remote-card" style="margin-bottom:14px">
+    <div class="row-top"><div><div class="nm">Fernbedienung</div><div class="sub">${esc(d.actLabel)}</div></div></div>
+    <div class="remote">
+      <div class="rk-col"><div class="rk-cap">Lautstärke</div>${k('volup', '+', '', 'Lauter')}${k('mute', 'Stumm', 'sm mini', 'Stumm')}${k('voldown', '−', '', 'Leiser')}</div>
+      <div class="rk-pad">
+        ${k('up', '▲', 'p-up', 'Hoch')}${k('left', '◀', 'p-left', 'Links')}${k('ok', 'OK', 'p-ok', 'OK')}${k('right', '▶', 'p-right', 'Rechts')}${k('down', '▼', 'p-down', 'Runter')}
+      </div>
+      <div class="rk-col"><div class="rk-cap">Programm</div>${k('chup', '+', '', 'Programm hoch')}<span class="rk sm none"></span>${k('chdown', '−', '', 'Programm runter')}</div>
+    </div>
+    <div class="rk-row">${k('back', 'Zurück', 'txt')}${k('menu', 'Menü', 'txt')}${k('guide', 'Guide', 'txt')}${k('info', 'Info', 'txt')}</div>
+    <div class="rk-row">${k('rew', '«', '', 'Zurückspulen')}${k('play', '▶', '', 'Play')}${k('pause', '❚❚', 'mini', 'Pause')}${k('stop', '■', '', 'Stopp')}${k('ff', '»', '', 'Vorspulen')}</div>
+    ${nums.length ? `<div class="rk-nums">${nums.map(n => k(String(n), String(n))).join('')}</div>` : ''}
+  </div>`;
+}
 function renderSzenen(d) {
   const acts = d.har.activities || [];
   const sceneGrid = (r) => `<div class="scene-grid">${(d.hue.scenes || []).filter(s => s.group === r.id).map(s => {
@@ -547,8 +569,9 @@ function renderSzenen(d) {
     <div class="row-top"><div><div class="sub">Harmony – läuft gerade</div><div class="nm" style="font-size:20px">${esc(d.actLabel)}</div></div>
       <button class="chip danger" data-harmony-off ${d.actOn && d.har.ok ? '' : 'disabled'}>Alles aus</button></div>
     ${acts.length ? `<div class="chips">${acts.map(a => `<button class="chip ${a.id === d.actId ? 'active' : ''}" data-activity="${esc(a.id)}" ${d.har.ok ? '' : 'disabled'}>${esc(a.label)}</button>`).join('')}</div>` : ''}
-    <div class="muted">${d.har.ok ? 'Neue Szenen erscheinen hier automatisch, sobald sie einmal über die Fernbedienung gestartet wurden.' : 'Harmony Hub nicht erreichbar.'}</div>
+    ${d.har.ok ? '' : '<div class="muted">Harmony Hub nicht erreichbar.</div>'}
   </div>
+  ${remoteCard(d)}
   ${d.rooms.map(r => `<div class="card row-card" style="margin-bottom:14px"><div class="row-top"><div><div class="nm">Lichtszenen ${esc(r.name)}</div><div class="sub">Antippen zum Aktivieren · auch in der Hue-App und bei Alexa</div></div></div>
     ${sceneGrid(r)}</div>`).join('')}`;
 }
@@ -581,6 +604,7 @@ document.addEventListener('click', (e) => { if (e.target.closest('#tokens-reload
 // ---------- Rendern ----------
 function render() {
   if (!S) return;
+  if (typeof renderKalender !== 'function') return; // layouts2.js noch nicht geladen (erste Live-Meldung kann vorher eintreffen)
   const d = derive();
   renderFrame(d);
   // Tokens: eingebettete Seite nur einmal laden, nicht bei jedem Live-Update neu zeichnen
@@ -615,9 +639,14 @@ function bindVSlider(d) {
 // ---------- Bedienung ----------
 let dialTimer = null, dialTarget = null;
 function blindsAll(pos) { (S.ikea.blinds || []).filter(x => x.reachable).forEach(x => api('ikea/blind/' + x.id, { position: pos })); }
+// Standard-Aktivität für den TV-Schalter und den Filmabend: „Sunrise TV“, sonst die erste mit „TV“, sonst die erste
+function tvDefault(d) {
+  const acts = d.har.activities || [];
+  return acts.find(a => a.label === 'Sunrise TV') || acts.find(a => /\btv\b/i.test(a.label)) || acts[0];
+}
 function toggleTv(d) {
   if (d.actOn) { api('harmony/off'); toast('Schalte alles aus …'); return; }
-  const a = d.har.activities?.[0];
+  const a = tvDefault(d);
   if (!a) { toast('Noch keine Harmony-Szene bekannt.'); return; }
   api('harmony/activity/' + a.id); toast('Starte „' + a.label + '“ …');
 }
@@ -700,6 +729,7 @@ document.addEventListener('click', (e) => {
   else if (b.dataset.allblinds) blindsAll(Number(b.dataset.allblinds));
   else if (b.dataset.activity) { api('harmony/activity/' + b.dataset.activity); toast('Starte „' + b.textContent.trim() + '“ …'); }
   else if ('harmonyOff' in b.dataset) { api('harmony/off'); toast('Schalte alles aus …'); }
+  else if (b.dataset.hkey) api('harmony/key/' + b.dataset.hkey);
   else if (b.dataset.vac) {
     const names = { start: 'Reinigung startet …', pause: 'Pause', resume: 'Reinigung geht weiter …', stop: 'Gestoppt', dock: 'Fährt zur Station …', locate: 'Roboter meldet sich …', dust: 'Absaugen …', wash: 'Mopp waschen …', dry: 'Mopp trocknen …' };
     api('vacuum/cmd/' + b.dataset.vac); toast(names[b.dataset.vac] || 'Gesendet');
