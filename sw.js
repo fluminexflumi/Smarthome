@@ -5,7 +5,7 @@
 //  - Netz zuerst: Neue Versionen (GitHub Pages / lokaler Server) sind sofort da.
 //    Der Zwischenspeicher dient nur dazu, dass die App ohne Netz noch startet.
 // Bei Änderungen an der Dateiliste VERSION erhöhen.
-const VERSION = 'sh-v12';
+const VERSION = 'sh-v13';
 const SHELL = ['./', 'index.html', 'style.css', 'layouts.css', 'layouts2.css', 'app.js', 'layouts.js', 'layouts2.js', 'auth.js', 'pwa.js', 'manifest.webmanifest',
   'wohnzimmer.jpg', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 

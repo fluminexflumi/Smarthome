@@ -10,6 +10,10 @@ try { view = localStorage.getItem('sh.view') || 'home'; } catch {}
 
 // ---------- Icons ----------
 const I = {
+  mute: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg>',
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>',
+  pad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 5v1M12 18v1M5 12h1M18 12h1"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h14"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>',
   blind: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 8h16M4 12h16"/><path d="M12 12v4"/></svg>',
@@ -544,20 +548,77 @@ function remoteCard(d) {
     ? `<button class="rk ${cls}" data-hkey="${key}" title="${esc(title || label)}" aria-label="${esc(title || label)}">${label}</button>`
     : `<span class="rk ${cls} none" aria-hidden="true"></span>`;
   const nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0].filter(n => has.has(String(n)));
-  return `<div class="card row-card remote-card" style="margin-bottom:14px">
-    <div class="row-top"><div><div class="nm">Fernbedienung</div><div class="sub">${esc(d.actLabel)}</div></div></div>
-    <div class="remote">
-      <div class="rk-col"><div class="rk-cap">Lautstärke</div>${k('volup', '+', '', 'Lauter')}${k('mute', 'Stumm', 'sm mini', 'Stumm')}${k('voldown', '−', '', 'Leiser')}</div>
-      <div class="rk-pad">
+  const hasVol = has.has('volup') && has.has('voldown');
+  const hasPad = ['up', 'down', 'left', 'right', 'ok'].some(x => has.has(x));
+  const tog = (id, icon, label, show = true) => show
+    ? `<button class="rk rk-tog ${remotePanel === id ? 'open' : ''}" data-rpanel="${id}" aria-label="${label}" aria-expanded="${remotePanel === id}">${icon}</button>` : '';
+  // Drehregler (Variante 8): im Kreis fahren = lauter/leiser in Stufen, Mitte = stumm. Harmony kennt keine absolute Lautstärke → nur Schritte.
+  const ring = hasVol ? `<div class="vol-ring" id="vol-ring" role="slider" tabindex="0" aria-label="Lautstärke: im Kreis drehen, Pfeiltasten hoch/runter"
+      aria-valuetext="Schritte">
+      <div class="vr-track"><div class="vr-knob" id="vr-knob" style="transform:rotate(${volAngle}deg)"><i></i></div></div>
+      <div class="vr-center">${has.has('mute') ? `<button class="vr-mute" data-hkey="mute" aria-label="Stumm">${I.mute}</button>` : ''}
+        <div class="vr-txt" id="vr-txt">Lautstärke</div><div class="vr-hint">drehen</div></div>
+      <span class="vr-sym vr-minus">−</span><span class="vr-sym vr-plus">+</span>
+    </div>` : '';
+  const panel = remotePanel === 'pad' && hasPad ? `<div class="rk-pad">
         ${k('up', '▲', 'p-up', 'Hoch')}${k('left', '◀', 'p-left', 'Links')}${k('ok', 'OK', 'p-ok', 'OK')}${k('right', '▶', 'p-right', 'Rechts')}${k('down', '▼', 'p-down', 'Runter')}
       </div>
-      <div class="rk-col"><div class="rk-cap">Programm</div>${k('chup', '+', '', 'Programm hoch')}<span class="rk sm none"></span>${k('chdown', '−', '', 'Programm runter')}</div>
-    </div>
-    <div class="rk-row">${k('back', 'Zurück', 'txt')}${k('menu', 'Menü', 'txt')}${k('guide', 'Guide', 'txt')}${k('info', 'Info', 'txt')}</div>
-    <div class="rk-row">${k('rew', '«', '', 'Zurückspulen')}${k('play', '▶', '', 'Play')}${k('pause', '❚❚', 'mini', 'Pause')}${k('stop', '■', '', 'Stopp')}${k('ff', '»', '', 'Vorspulen')}</div>
-    ${nums.length ? `<div class="rk-nums">${nums.map(n => k(String(n), String(n))).join('')}</div>` : ''}
+      <div class="rk-row">${k('guide', 'Guide', 'txt')}${k('info', 'Info', 'txt')}</div>
+      <div class="rk-row">${k('rew', '«', '', 'Zurückspulen')}${k('play', '▶', '', 'Play')}${k('pause', '❚❚', 'mini', 'Pause')}${k('stop', '■', '', 'Stopp')}${k('ff', '»', '', 'Vorspulen')}</div>`
+    : remotePanel === 'num' && nums.length ? `<div class="rk-nums">${nums.map(n => k(String(n), String(n))).join('')}</div>` : '';
+  return `<div class="card row-card remote-card" style="margin-bottom:14px">
+    <div class="row-top"><div><div class="nm">Fernbedienung</div><div class="sub">${esc(d.actLabel)}</div></div></div>
+    ${ring}
+    <div class="rk-chrow">${k('chdown', '◀&nbsp; Programm', 'txt wide', 'Programm zurück')}${k('chup', 'Programm &nbsp;▶', 'txt wide', 'Programm weiter')}</div>
+    <div class="rk-row">${k('back', I.back, '', 'Zurück')}${tog('pad', I.pad, 'Steuerkreuz und Wiedergabe', hasPad)}${k('menu', I.menu, '', 'Menü')}${tog('num', '123', 'Zahlen', nums.length > 0)}</div>
+    ${panel ? `<div class="rk-panel">${panel}</div>` : ''}
   </div>`;
 }
+let remotePanel = null; // aufgeklapptes Feld unter dem Drehregler: 'pad' | 'num' | null
+let volAngle = 0;        // Stellung des Drehknopfs (nur Anzeige)
+// Drehregler: alle VOL_STEP Grad eine Taste lauter/leiser; Befehle über eine Warteschlange, damit der Hub nicht überflutet wird
+const VOL_STEP = 24;
+let volQueue = 0, volTimer = null, volShown = 0, volShowTimer = null;
+function volPump() {
+  if (volTimer || !volQueue) return;
+  const up = volQueue > 0; volQueue += up ? -1 : 1;
+  api('harmony/key/' + (up ? 'volup' : 'voldown'));
+  volTimer = setTimeout(() => { volTimer = null; volPump(); }, 140);
+}
+function volFeedback(step) {
+  volShown += step;
+  const t = $('#vr-txt'); if (t) t.textContent = (volShown > 0 ? '+' : volShown < 0 ? '−' : '') + Math.abs(volShown);
+  $('#vol-ring')?.classList.toggle('turning', true);
+  clearTimeout(volShowTimer);
+  volShowTimer = setTimeout(() => { volShown = 0; const t2 = $('#vr-txt'); if (t2) t2.textContent = 'Lautstärke'; $('#vol-ring')?.classList.remove('turning'); }, 1200);
+  if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
+}
+function volStep(step) { volQueue += step; volFeedback(step); volPump(); }
+document.addEventListener('pointerdown', (e) => {
+  const ringEl = e.target.closest?.('#vol-ring');
+  if (!ringEl || e.target.closest('.vr-mute') || e.button > 0) return;
+  e.preventDefault();
+  busy = true;
+  const r = ringEl.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const ang = (ev) => Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI;
+  let last = ang(e), acc = 0;
+  const move = (ev) => {
+    const a = ang(ev); let dlt = a - last; last = a;
+    if (dlt > 180) dlt -= 360; if (dlt < -180) dlt += 360;
+    acc += dlt; volAngle += dlt;
+    const knob = $('#vr-knob'); if (knob) knob.style.transform = `rotate(${volAngle}deg)`;
+    while (acc >= VOL_STEP) { acc -= VOL_STEP; volStep(1); }   // im Uhrzeigersinn = lauter
+    while (acc <= -VOL_STEP) { acc += VOL_STEP; volStep(-1); }
+  };
+  const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.target.id !== 'vol-ring') return;
+  if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { volStep(1); volAngle += VOL_STEP; e.preventDefault(); }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { volStep(-1); volAngle -= VOL_STEP; e.preventDefault(); }
+  const knob = $('#vr-knob'); if (knob) knob.style.transform = `rotate(${volAngle}deg)`;
+});
 // Schmale Zeile „Alle Lampen“ für die Szenen-Ansicht: Schalter + Regler (die grosse Karte bleibt in „Licht“)
 function allLightsRow(d) {
   const dim = d.onLights.filter(l => l.bri != null);
@@ -754,6 +815,7 @@ document.addEventListener('click', (e) => {
   else if (b.dataset.allblinds) blindsAll(Number(b.dataset.allblinds));
   else if (b.dataset.activity) { api('harmony/activity/' + b.dataset.activity); toast('Starte „' + b.textContent.trim() + '“ …'); }
   else if ('harmonyOff' in b.dataset) { api('harmony/off'); toast('Schalte alles aus …'); }
+  else if (b.dataset.rpanel) { remotePanel = remotePanel === b.dataset.rpanel ? null : b.dataset.rpanel; render(); }
   else if (b.dataset.hkey && e.detail === 0) api('harmony/key/' + b.dataset.hkey); // nur Tastatur (Enter/Leertaste); Maus/Finger: pointerdown unten
   else if (b.dataset.vac) {
     const names = { start: 'Reinigung startet …', pause: 'Pause', resume: 'Reinigung geht weiter …', stop: 'Gestoppt', dock: 'Fährt zur Station …', locate: 'Roboter meldet sich …', dust: 'Absaugen …', wash: 'Mopp waschen …', dry: 'Mopp trocknen …' };
