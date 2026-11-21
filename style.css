@@ -377,7 +377,7 @@ input[type=range] { width: 100%; height: 26px; margin: 0; accent-color: var(--or
 .remote { display: grid; grid-template-columns: 64px 1fr 64px; gap: 14px; align-items: center; justify-items: center; margin: 10px 0 14px; }
 .rk { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; border: 1px solid var(--line-2); background: rgba(127,127,127,.12); color: inherit; font: inherit; font-size: 20px; font-weight: 700; cursor: pointer; transition: background .15s, transform .06s; touch-action: manipulation; user-select: none; }
 .rk:hover { background: rgba(127,127,127,.22); }
-.rk:active { transform: scale(.92); background: var(--purple); color: #fff; }
+.rk:active, .rk.down { transform: scale(.92); background: var(--purple); color: #fff; }
 .rk.none { visibility: hidden; cursor: default; }
 .rk.sm { width: 44px; height: 44px; font-size: 16px; }
 .rk.mini { font-size: 11px; letter-spacing: -.02em; }

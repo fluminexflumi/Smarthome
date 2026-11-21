@@ -681,6 +681,14 @@ document.addEventListener('input', (e) => {
   if (el.classList?.contains('fill-range')) el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%');
 });
 document.addEventListener('pointerdown', (e) => { if (e.target.type === 'range') busy = true; });
+// Fernbedienung: schon beim Antippen senden (nicht erst beim Loslassen) und solange der Finger drauf ist nicht neu zeichnen
+document.addEventListener('pointerdown', (e) => {
+  const b = e.target.closest?.('[data-hkey]'); if (!b || e.button > 0) return;
+  busy = true;
+  b.classList.add('down'); setTimeout(() => b.classList.remove('down'), 180);
+  if (navigator.vibrate) try { navigator.vibrate(15); } catch {}
+  api('harmony/key/' + b.dataset.hkey);
+});
 document.addEventListener('pointerup', () => { if (busy && !$('#vslider')?.matches(':active')) setTimeout(() => { busy = false; render(); }, 500); });
 function vacToggleRoom(id) { if (!S?.vacuum?.ok) return; vacSel.has(id) ? vacSel.delete(id) : vacSel.add(id); render(); }
 document.addEventListener('keydown', (e) => {
@@ -729,7 +737,7 @@ document.addEventListener('click', (e) => {
   else if (b.dataset.allblinds) blindsAll(Number(b.dataset.allblinds));
   else if (b.dataset.activity) { api('harmony/activity/' + b.dataset.activity); toast('Starte „' + b.textContent.trim() + '“ …'); }
   else if ('harmonyOff' in b.dataset) { api('harmony/off'); toast('Schalte alles aus …'); }
-  else if (b.dataset.hkey) api('harmony/key/' + b.dataset.hkey);
+  else if (b.dataset.hkey && e.detail === 0) api('harmony/key/' + b.dataset.hkey); // nur Tastatur (Enter/Leertaste); Maus/Finger: pointerdown unten
   else if (b.dataset.vac) {
     const names = { start: 'Reinigung startet …', pause: 'Pause', resume: 'Reinigung geht weiter …', stop: 'Gestoppt', dock: 'Fährt zur Station …', locate: 'Roboter meldet sich …', dust: 'Absaugen …', wash: 'Mopp waschen …', dry: 'Mopp trocknen …' };
     api('vacuum/cmd/' + b.dataset.vac); toast(names[b.dataset.vac] || 'Gesendet');
