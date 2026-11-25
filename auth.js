@@ -6,7 +6,7 @@
     tenantId: '8a032887-3bad-43ba-b817-0140a7e8edbe',
     clientId: '25e9e75c-ff6b-4974-b1b3-6381eb33baf6',
     scope: 'Dashboard.Control',
-    publicApi: 'https://esu3.taile0658a.ts.net', // Tailscale Funnel → PC, Port 8081
+    publicApi: 'https://smarthome.flumi.ch', // Cloudflare Tunnel → NAS, Container smarthome, Port 8081
     testApi: 'http://localhost:8081'
   };
   const q = new URLSearchParams(location.search);
